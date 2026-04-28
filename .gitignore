@@ -28,6 +28,7 @@ yarn-error.log*
 out/
 build/
 dist/
+.workbuddy
 
 # plasmo - https://www.plasmo.com
 .plasmo
