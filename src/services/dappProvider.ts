@@ -1,25 +1,8 @@
 // DApp Provider Service - 实现EIP-1102和EIP-747标准
-import { ethers } from 'ethers';
 import { useWalletStore } from '../stores/walletStore';
+import type { EthereumProvider } from '../types';
 
-interface DappRequest {
-  id: string;
-  method: string;
-  params: any[];
-  origin: string;
-}
-
-interface WalletProvider {
-  isMyWallet: boolean;
-  request: (request: { method: string; params?: any[] }) => Promise<any>;
-  on: (event: string, handler: Function) => void;
-  removeListener: (event: string, handler: Function) => void;
-  selectedAddress: string | null;
-  chainId: string | null;
-  networkVersion: string | null;
-}
-
-class MyWalletProvider implements WalletProvider {
+class MyWalletProvider implements EthereumProvider {
   public isMyWallet = true;
   public selectedAddress: string | null = null;
   public chainId: string | null = null;

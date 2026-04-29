@@ -1,6 +1,11 @@
 import { useWalletStore } from '../stores/walletStore';
 import injectMyWallet from './injected-helper';
-import * as constant from './type_constant';
+import {
+  WALLET_CONNECT,
+  WALLET_GET_ACCOUNT,
+  WALLET_SIGN_MESSAGE,
+  WALLET_DISCONNECT,
+} from '../utils/constants';
 
 console.log('background 脚本启动了');
 
@@ -8,7 +13,7 @@ console.log('background 脚本启动了');
 const initWallet = () => {
   const walletStore = useWalletStore.getState()
   // TODO 初始化逻辑
-  console.log('🔄 初始化钱包状态完成'); 
+  console.log('🔄 初始化钱包状态完成', walletStore); 
 }
 
 // 注册消息监听器
@@ -17,7 +22,7 @@ const setupMessageListener = () => {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("background 收到消息:", message.type, "来自标签页：", sender.tab?.id);
     // 处理连接请求
-    if (message.type === constant.WALLET_CONNECT) {
+    if (message.type === WALLET_CONNECT) {
       const walletStore = useWalletStore.getState()
       try {
         walletStore.connect().then(() => {
@@ -39,7 +44,7 @@ const setupMessageListener = () => {
     }
 
     // 获取账号请求
-    if (message.type === constant.WALLET_GET_ACCOUNT) {
+    if (message.type === WALLET_GET_ACCOUNT) {
       const walletStore = useWalletStore.getState()
       const account = walletStore.currentAccount
       sendResponse({
@@ -49,7 +54,7 @@ const setupMessageListener = () => {
     }
     
     // 处理签名
-    if (message.type === constant.WALLET_SIGN_MESSAGE) {
+    if (message.type === WALLET_SIGN_MESSAGE) {
       if (!message.data || !message.data.message) {
         sendResponse({
           data: { error: '缺少签名信息' },
@@ -78,7 +83,7 @@ const setupMessageListener = () => {
     }
 
     // 处理断开连接
-    if (message.type === constant.WALLET_DISCONNECT) {
+    if (message.type === WALLET_DISCONNECT) {
       const walletStore = useWalletStore.getState()
       walletStore.disconnect()
       sendResponse({

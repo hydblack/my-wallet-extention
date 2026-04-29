@@ -1,117 +1,21 @@
-export interface WalletAccount {
-  address: string;
-  privateKey: string;
-  name: string;
-  index: number;
-}
+/**
+ * wallet.ts — 向后兼容的重导出文件
+ *
+ * 原 wallet.ts 中的类型和常量已迁移到以下位置：
+ *   - 类型 → src/types/account.ts / network.ts / token.ts / store.ts / dapp.ts
+ *   - 常量 → src/utils/constants.ts
+ *
+ * 此文件保留以兼容现有的 `import ... from '../types/wallet'` 语句。
+ * 建议逐步将导入路径更新为具体模块路径。
+ *
+ * @deprecated 请直接从 '../types' 或具体子模块导入
+ */
 
-export interface WalletState {
-  isLocked: boolean;
-  isConnected: boolean;
-  accounts: WalletAccount[];
-  currentAccount: WalletAccount | null;
-  mnemonic: string | null;
-  password: string | null;
-  currentNetwork: Network;
-  networks: Network[];
-  tokens: Token[];
-}
+export type { WalletAccount } from './account';
+export type { Network } from './network';
+export type { Token, TokenStandard, Transaction, TransactionType, TransactionStatus } from './token';
+export type { WalletState } from './store';
+export type { DappRequest, EthRequestAccountsParams, WatchAssetParams } from './dapp';
 
-export interface Network {
-  id: string;
-  name: string;
-  rpcUrl: string;
-  chainId: number;
-  symbol: string;
-  blockExplorerUrl?: string;
-}
-
-export interface Token {
-  address: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  type: 'ERC20' | 'ERC721' | 'ERC1155';
-  balance?: string;
-  tokenId?: string;
-  image?: string;
-}
-
-export interface Transaction {
-  hash: string;
-  from: string;
-  to: string;
-  value: string;
-  gasLimit: string;
-  gasPrice: string;
-  data?: string;
-  type: 'send' | 'receive';
-  status: 'pending' | 'confirmed' | 'failed';
-  timestamp: number;
-  tokenAddress?: string;
-  tokenSymbol?: string;
-}
-
-export interface DappRequest {
-  id: string;
-  method: string;
-  params: any[];
-  origin: string;
-  timestamp: number;
-}
-
-// EIP-1102 types
-export interface EthRequestAccountsParams {
-  method: 'eth_requestAccounts';
-  params: [];
-}
-
-// EIP-747 types
-export interface WatchAssetParams {
-  method: 'wallet_watchAsset';
-  params: {
-    type: 'ERC20' | 'ERC721' | 'ERC1155';
-    options: {
-      address: string;
-      symbol: string;
-      decimals?: number;
-      image?: string;
-      tokenId?: string;
-    };
-  };
-}
-
-export const DEFAULT_NETWORKS: Network[] = [
-  {
-    id: 'sepolia',
-    name: 'Ethereum Sepolia Testnet',
-    rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/Hqd_61uGu4Xbq16eZ2j5N',
-    chainId: 11155111,
-    symbol: 'ETH',
-    blockExplorerUrl: 'https://sepolia.etherscan.io'
-  },
-  {
-    id: 'ethereum',
-    name: 'Ethereum Mainnet',
-    rpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/Hqd_61uGu4Xbq16eZ2j5N',
-    chainId: 1,
-    symbol: 'ETH',
-    blockExplorerUrl: 'https://etherscan.io'
-  },
-  {
-    id: 'polygon',
-    name: 'Polygon Mainnet',
-    rpcUrl: 'https://polygon-mainnet.g.alchemy.com/v2/Hqd_61uGu4Xbq16eZ2j5N',
-    chainId: 137,
-    symbol: 'POL',
-    blockExplorerUrl: 'https://polygonscan.com'
-  },
-  {
-    id: 'polygon-amoy',
-    name: 'Polygon Amoy Testnet',
-    rpcUrl: 'https://polygon-amoy.g.alchemy.com/v2/Hqd_61uGu4Xbq16eZ2j5N',
-    chainId: 80002,
-    symbol: 'POL',
-    blockExplorerUrl: 'https://www.oklink.com/amoy'
-  }
-];
+// 常量重导出（保持向后兼容）
+export { DEFAULT_NETWORKS } from '../utils/constants';

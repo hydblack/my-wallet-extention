@@ -1,7 +1,11 @@
 /**
  * 桥接脚本
  * 
- * 网页(injected-helper)消息 => 桥接(message-bridge)转发 => 插件(background/index)接受到网页消息，处理消息并返回处理信息 => 桥接将处理的信息转给 => 网页
+ * 网页(injected-helper)消息 
+ * => 桥接(message-bridge)转发 
+ * => 插件(background/index)接受到网页消息，处理消息并返回处理信息 
+ * => 桥接将处理的信息转给 
+ * => 网页
  * 
  * 网页脚本：插入到网页上下文， 但是不能访问不到 chrom.runtime
  */
