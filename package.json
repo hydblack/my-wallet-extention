@@ -34,8 +34,7 @@
     "typescript": "5.3.3"
   },
   "manifest": {
-    "host_permissions": [
-      "https://*/*"
-    ]
+    "host_permissions": ["<all_urls>"], 
+    "permissions": ["tabs", "scripting", "storage"]
   }
 }

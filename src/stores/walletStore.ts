@@ -74,7 +74,7 @@ interface WalletStore extends WalletState {
 }
 
 const initialState: WalletState = {
-  isLocked: false,
+  isLocked: true,
   isConnected: false,
   accounts: [],
   currentAccount: null,
@@ -378,12 +378,12 @@ export const useWalletStore = create<WalletStore>()(
       // 自定义存储：使用 chrome.storage.local
       storage: {
         getItem: async (name: string) => {
-          console.log("从 chrome.storage.local 获取数据:", name, chrome.storage)
+          console.log("获取存储项:", name, chrome.storage)
           const result = await chrome.storage.local.get(name)
           return result[name] || null
         },
         setItem: async (name: string, value: any) => {
-          console.log("向 chrome.storage.local 设置数据:", name, value)
+          console.log("设置存储项:", name, value, chrome.storage)
           await chrome.storage.local.set({ [name]: value })
         },
         removeItem: async (name: string) => {
