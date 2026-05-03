@@ -78,6 +78,7 @@ function WalletApp() {
         <UnlockScreen
           onUnlock={handleUnlock}
           onBack={() => setCurrentView('lock')}
+          onImport={() => setCurrentView('import')}
         />
       )}
 

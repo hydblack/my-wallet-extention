@@ -60,12 +60,12 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
   }
 
   return (
-    <div className="h-full plasmo-bg-gray-100 dark:plasmo-bg-gray-900 plasmo-p-6">
+    <div className="h-full plasmo-bg-[#2d3142] plasmo-p-6">
       {/* 顶部导航 */}
       <div className="plasmo-flex plasmo-items-center plasmo-mb-6">
         <button
           onClick={onBack}
-          className="plasmo-p-2 plasmo-text-gray-600 dark:plasmo-text-gray-300 hover:plasmo-bg-gray-200 dark:hover:plasmo-bg-gray-700 plasmo-rounded-lg">
+          className="plasmo-p-2 plasmo-text-gray-300 hover:plasmo-bg-gray-700 plasmo-rounded-lg">
           <svg
             className="plasmo-w-6 plasmo-h-6"
             fill="none"
@@ -79,7 +79,7 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
             />
           </svg>
         </button>
-        <h2 className="plasmo-flex-1 plasmo-text-xl plasmo-font-semibold plasmo-text-gray-900 dark:plasmo-text-white plasmo-text-center plasmo-mr-10">
+        <h2 className="plasmo-flex-1 plasmo-text-xl plasmo-font-semibold plasmo-text-gray-100 plasmo-text-center plasmo-mr-10">
           导入钱包
         </h2>
       </div>
@@ -94,8 +94,8 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
             }}
             className={`plasmo-flex-1 plasmo-py-3 plasmo-px-4 plasmo-font-semibold plasmo-rounded-xl plasmo-transition-all plasmo-duration-200 ${
               importType === "mnemonic"
-                ? "plasmo-bg-blue-600 plasmo-text-white plasmo-shadow-md"
-                : "plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600"
+                ? "plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-shadow-md"
+                : "plasmo-bg-[#3d4252] plasmo-text-gray-300 plasmo-border plasmo-border-gray-600"
             }`}>
             助记词
           </button>
@@ -106,8 +106,8 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
             }}
             className={`plasmo-flex-1 plasmo-py-3 plasmo-px-4 plasmo-font-semibold plasmo-rounded-xl plasmo-transition-all plasmo-duration-200 ${
               importType === "privateKey"
-                ? "plasmo-bg-blue-600 plasmo-text-white plasmo-shadow-md"
-                : "plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600"
+                ? "plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-shadow-md"
+                : "plasmo-bg-[#3d4252] plasmo-text-gray-300 plasmo-border plasmo-border-gray-600"
             }`}>
             私钥
           </button>
@@ -117,7 +117,7 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
         {importType === "mnemonic" && (
           <div className="plasmo-space-y-4">
             <div>
-              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
                 助记词
               </label>
               <textarea
@@ -125,9 +125,9 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
                 onChange={(e) => setMnemonic(e.target.value)}
                 placeholder="请输入助记词，用空格分隔"
                 rows={4}
-                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500 plasmo-resize-none"
+                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50 plasmo-resize-none"
               />
-              <p className="plasmo-mt-2 plasmo-text-xs plasmo-text-gray-500 dark:plasmo-text-gray-400">
+              <p className="plasmo-mt-2 plasmo-text-xs plasmo-text-gray-400">
                 多个单词用空格分隔，通常是12个或24个单词
               </p>
             </div>
@@ -138,7 +138,7 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
         {importType === "privateKey" && (
           <div className="plasmo-space-y-4">
             <div>
-              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
                 账户名称
               </label>
               <input
@@ -146,12 +146,12 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
                 value={walletName}
                 onChange={(e) => setWalletName(e.target.value)}
                 placeholder="例如：我的钱包"
-                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500"
+                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50"
               />
             </div>
 
             <div>
-              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+              <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
                 私钥
               </label>
               <textarea
@@ -159,9 +159,9 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
                 onChange={(e) => setPrivateKey(e.target.value)}
                 placeholder="请输入私钥"
                 rows={3}
-                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500 plasmo-resize-none plasmo-font-mono"
+                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50 plasmo-resize-none plasmo-font-mono"
               />
-              <p className="plasmo-mt-2 plasmo-text-xs plasmo-text-red-500 dark:plasmo-text-red-400">
+              <p className="plasmo-mt-2 plasmo-text-xs plasmo-text-red-400">
                 ⚠️ 切勿将私钥透露给任何人！我们不会向您索要私钥
               </p>
             </div>
@@ -171,7 +171,7 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
         {/* 密码设置 */}
         <div className="plasmo-space-y-4 plasmo-mt-4">
           <div>
-            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
               设置密码
             </label>
             <input
@@ -179,12 +179,12 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="输入密码（至少8个字符）"
-              className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500"
+              className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50"
             />
           </div>
 
           <div>
-            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
               确认密码
             </label>
             <input
@@ -192,15 +192,15 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="再次输入密码"
-              className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500"
+              className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50"
             />
           </div>
         </div>
 
         {/* 错误提示 */}
         {error && (
-          <div className="plasmo-mt-4 plasmo-p-3 plasmo-bg-red-50 dark:plasmo-bg-red-900/20 plasmo-border plasmo-border-red-200 dark:plasmo-border-red-800 plasmo-rounded-lg">
-            <p className="plasmo-text-sm plasmo-text-red-600 dark:plasmo-text-red-400">
+          <div className="plasmo-mt-4 plasmo-p-3 plasmo-bg-red-900/20 plasmo-border plasmo-border-red-800 plasmo-rounded-lg">
+            <p className="plasmo-text-sm plasmo-text-red-400">
               {error}
             </p>
           </div>
@@ -210,12 +210,12 @@ export const ImportWallet: React.FC<ImportWalletProps> = ({
         <button
           onClick={handleImport}
           disabled={isLoading}
-          className="plasmo-w-full plasmo-mt-6 plasmo-py-3 plasmo-px-4 plasmo-bg-blue-600 plasmo-text-white plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-bg-blue-700 plasmo-transition-all plasmo-duration-200 disabled:plasmo-opacity-50 disabled:plasmo-cursor-not-allowed">
+          className="plasmo-w-full plasmo-mt-6 plasmo-py-3 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-brightness-110 plasmo-transition-all plasmo-duration-200 disabled:plasmo-opacity-50 disabled:plasmo-cursor-not-allowed">
           {isLoading ? "导入中..." : "导入"}
         </button>
 
         {/* 提示信息 */}
-        <p className="plasmo-mt-4 plasmo-text-xs plasmo-text-gray-500 dark:plasmo-text-gray-400 plasmo-text-center">
+        <p className="plasmo-mt-4 plasmo-text-xs plasmo-text-gray-400 plasmo-text-center">
           导入后，您的钱包将使用新设置的密码进行加密保护
         </p>
       </div>

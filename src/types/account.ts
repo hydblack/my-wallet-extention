@@ -14,4 +14,6 @@ export interface WalletAccount {
   name: string;
   /** 账户在 HD 派生路径中的索引 */
   index: number;
+  /** ETH 余额（格式化后的字符串，如 "1.234 ETH"） */
+  ethBalance?: string;
 }

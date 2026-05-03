@@ -1,14 +1,17 @@
 import React, { useState } from "react"
+
 import { useWalletStore } from "../stores/walletStore"
 
 interface UnlockScreenProps {
   onUnlock: () => void
   onBack: () => void
+  onImport: () => void
 }
 
 export const UnlockScreen: React.FC<UnlockScreenProps> = ({
   onUnlock,
-  onBack
+  onBack,
+  onImport
 }) => {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -26,19 +29,29 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
     setError("")
 
     setTimeout(() => {
-      unlockWallet(password)
-      onUnlock()
-      setIsLoading(false)
+      try {
+        const success = unlockWallet(password)
+        if (success) {
+          onUnlock()
+        } else {
+          setError("解锁失败，密码错误")
+        }
+      } catch (error) {
+        console.error(error)
+        setError("解锁失败，发生未知错误")
+      } finally {
+        setIsLoading(false)
+      }
     }, 1000)
   }
 
   return (
-    <div className="h-full plasmo-bg-gray-100 dark:plasmo-bg-gray-900 plasmo-p-6">
+    <div className="h-full plasmo-bg-[#2d3142] plasmo-p-6">
       {/* 顶部导航 */}
       <div className="plasmo-flex plasmo-items-center plasmo-mb-6">
         <button
           onClick={onBack}
-          className="plasmo-p-2 plasmo-text-gray-600 dark:plasmo-text-gray-300 hover:plasmo-bg-gray-200 dark:hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors">
+          className="plasmo-p-2 plasmo-text-gray-300 hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors">
           <svg
             className="plasmo-w-6 plasmo-h-6"
             fill="none"
@@ -52,7 +65,7 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
             />
           </svg>
         </button>
-        <h2 className="plasmo-flex-1 plasmo-text-xl plasmo-font-semibold plasmo-text-gray-900 dark:plasmo-text-white plasmo-text-center plasmo-mr-10">
+        <h2 className="plasmo-flex-1 plasmo-text-xl plasmo-font-semibold plasmo-text-gray-100 plasmo-text-center plasmo-mr-10">
           解锁钱包
         </h2>
       </div>
@@ -61,9 +74,9 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
       <div className="plasmo-max-w-md plasmo-mx-auto plasmo-mt-12">
         {/* 钱包图标 */}
         <div className="plasmo-text-center plasmo-mb-8">
-          <div className="plasmo-w-16 plasmo-h-16 plasmo-bg-blue-600 plasmo-rounded-2xl plasmo-flex plasmo-items-center plasmo-justify-center plasmo-mx-auto plasmo-mb-4">
+          <div className="plasmo-w-16 plasmo-h-16 plasmo-bg-[#c8f560] plasmo-rounded-2xl plasmo-flex plasmo-items-center plasmo-justify-center plasmo-mx-auto plasmo-mb-4">
             <svg
-              className="plasmo-w-8 plasmo-h-8 plasmo-text-white"
+              className="plasmo-w-8 plasmo-h-8 plasmo-text-[#2d3142]"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24">
@@ -75,10 +88,10 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
               />
             </svg>
           </div>
-          <h1 className="plasmo-text-2xl plasmo-font-bold plasmo-text-gray-900 dark:plasmo-text-white">
+          <h1 className="plasmo-text-2xl plasmo-font-bold plasmo-text-gray-100">
             欢迎回来
           </h1>
-          <p className="plasmo-text-gray-500 dark:plasmo-text-gray-400 plasmo-mt-2">
+          <p className="plasmo-text-gray-400 plasmo-mt-2">
             输入密码解锁您的钱包
           </p>
         </div>
@@ -86,7 +99,7 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
         {/* 密码输入框 */}
         <div className="plasmo-space-y-4">
           <div>
-            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-700 dark:plasmo-text-gray-300 plasmo-mb-2">
+            <label className="plasmo-block plasmo-text-sm plasmo-font-medium plasmo-text-gray-300 plasmo-mb-2">
               密码
             </label>
             <div className="plasmo-relative">
@@ -95,13 +108,13 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
-                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-white dark:plasmo-bg-gray-800 plasmo-border plasmo-border-gray-300 dark:plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-900 dark:plasmo-text-white plasmo-placeholder-gray-400 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-blue-500"
+                className="plasmo-w-full plasmo-px-4 plasmo-py-3 plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 plasmo-rounded-xl plasmo-text-gray-100 plasmo-placeholder-gray-500 focus:plasmo-outline-none focus:plasmo-ring-2 focus:plasmo-ring-[#c8f560]/50"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="plasmo-absolute plasmo-right-3 plasmo-top-1/2 plasmo-transform plasmo--translate-y-1/2 plasmo-text-gray-400 hover:plasmo-text-gray-600">
+                className="plasmo-absolute plasmo-right-3 plasmo-top-1/2 plasmo-transform plasmo--translate-y-1/2 plasmo-text-gray-400 hover:plasmo-text-gray-200">
                 {showPassword ? "🙈" : "👁"}
               </button>
             </div>
@@ -109,8 +122,8 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
 
           {/* 错误提示 */}
           {error && (
-            <div className="plasmo-p-3 plasmo-bg-red-50 dark:plasmo-bg-red-900/20 plasmo-border plasmo-border-red-200 dark:plasmo-border-red-800 plasmo-rounded-lg">
-              <p className="plasmo-text-sm plasmo-text-red-600 dark:plasmo-text-red-400">
+            <div className="plasmo-p-3 plasmo-bg-red-900/20 plasmo-border plasmo-border-red-800 plasmo-rounded-lg">
+              <p className="plasmo-text-sm plasmo-text-red-400">
                 {error}
               </p>
             </div>
@@ -120,14 +133,19 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({
           <button
             onClick={handleUnlock}
             disabled={isLoading}
-            className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-blue-600 plasmo-text-white plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-bg-blue-700 plasmo-transition-all plasmo-duration-200 disabled:plasmo-opacity-50 disabled:plasmo-cursor-not-allowed">
+            className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-brightness-110 plasmo-transition-all plasmo-duration-200 disabled:plasmo-opacity-50 disabled:plasmo-cursor-not-allowed">
             {isLoading ? "解锁中..." : "解锁"}
           </button>
         </div>
 
         {/* 忘记密码提示 */}
-        <p className="plasmo-mt-6 plasmo-text-sm plasmo-text-gray-500 dark:plasmo-text-gray-400 plasmo-text-center">
-          忘记密码？您需要使用助记词恢复钱包
+        <p className="plasmo-mt-6 plasmo-text-sm plasmo-text-gray-400 plasmo-text-center">
+          忘记密码？{" "}
+          <button
+            onClick={onImport}
+            className="plasmo-text-[#c8f560] hover:plasmo-underline plasmo-font-medium">
+            使用助记词/私钥恢复钱包
+          </button>
         </p>
       </div>
     </div>

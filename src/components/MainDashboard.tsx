@@ -1,5 +1,8 @@
 import React, { useState } from "react"
+
 import icon from "~/assets/icon.png"
+
+import { useWalletBalance } from "../hooks/useWalletBalance"
 import { useWalletStore } from "../stores/walletStore"
 
 interface MainDashboardProps {
@@ -10,7 +13,7 @@ interface MainDashboardProps {
 interface Account {
   address: string
   name: string
-  balance?: string
+  ethBalance?: string
   index: number
 }
 
@@ -18,24 +21,22 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   onLock,
   onExport
 }) => {
-  const [accounts] = useState<Account[]>([
-    {
-      address: "0x1234...5678",
-      name: "Account 1",
-      balance: "1.234 ETH",
-      index: 0
-    },
-    {
-      address: "0xabcd...efgh",
-      name: "Account 2",
-      balance: "0.567 ETH",
-      index: 1
-    }
-  ])
   const [selectedAccount, setSelectedAccount] = useState(0)
   const [showMenu, setShowMenu] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
-  const { lockWallet } = useWalletStore()
+  const [showNetworkSelector, setShowNetworkSelector] = useState(false)
+  const {
+    lockWallet,
+    accounts,
+    createAccount,
+    currentNetwork,
+    networks,
+    switchNetwork,
+    addToken,
+    removeToken,
+    tokens
+  } = useWalletStore()
+  const { ethBalance } = useWalletBalance()
 
   const formatAddress = (address: string) => {
     if (address.length > 12) {
@@ -127,16 +128,18 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
         </div>
 
         {/* 网络选择器 */}
-        <div className="plasmo-px-4 plasmo-pb-3">
-          <button className="plasmo-flex plasmo-items-center plasmo-space-x-2 plasmo-px-3 plasmo-py-2 plasmo-bg-[#3d4252] plasmo-rounded-lg plasmo-w-full plasmo-justify-between">
+        <div className="plasmo-px-4 plasmo-pb-3 plasmo-relative">
+          <button
+            onClick={() => setShowNetworkSelector(!showNetworkSelector)}
+            className="plasmo-flex plasmo-items-center plasmo-space-x-2 plasmo-px-3 plasmo-py-2 plasmo-bg-[#3d4252] plasmo-rounded-lg plasmo-w-full plasmo-justify-between">
             <div className="plasmo-flex plasmo-items-center plasmo-space-x-2">
               <div className="plasmo-w-6 plasmo-h-6 plasmo-bg-[#c8f560] plasmo-rounded-full" />
               <span className="plasmo-font-medium plasmo-text-sm plasmo-text-gray-200">
-                Ethereum Mainnet
+                {currentNetwork?.name || "选择网络"}
               </span>
             </div>
             <svg
-              className="plasmo-w-4 plasmo-h-4 plasmo-text-gray-500"
+              className={`plasmo-w-4 plasmo-h-4 plasmo-text-gray-500 plasmo-transition-transform ${showNetworkSelector ? "plasmo-rotate-180" : ""}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24">
@@ -148,6 +151,55 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               />
             </svg>
           </button>
+
+          {/* 网络下拉列表 */}
+          {showNetworkSelector && (
+            <>
+              <div
+                className="plasmo-fixed plasmo-inset-0"
+                onClick={() => setShowNetworkSelector(false)}
+              />
+              <div className="plasmo-absolute plasmo-left-4 plasmo-right-4 plasmo-top-full plasmo-mt-1 plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-shadow-lg plasmo-border plasmo-border-gray-600 plasmo-py-1 plasmo-z-20">
+                {networks.map((network) => (
+                  <button
+                    key={network.id}
+                    onClick={() => {
+                      switchNetwork(network.id)
+                      setShowNetworkSelector(false)
+                    }}
+                    className={`plasmo-w-full plasmo-flex plasmo-items-center plasmo-space-x-3 plasmo-px-4 plasmo-py-2 plasmo-text-sm plasmo-transition-colors ${
+                      currentNetwork?.id === network.id
+                        ? "plasmo-text-[#c8f560] plasmo-bg-[#4d5262]"
+                        : "plasmo-text-gray-300 hover:plasmo-bg-gray-700"
+                    }`}>
+                    <div
+                      className={`plasmo-w-2 plasmo-h-2 plasmo-rounded-full plasmo-flex-shrink-0 ${currentNetwork?.id === network.id ? "plasmo-bg-[#c8f560]" : "plasmo-bg-gray-500"}`}
+                    />
+                    <span className="plasmo-flex-1 plasmo-text-left">
+                      {network.name}
+                    </span>
+                    <span className="plasmo-text-xs plasmo-text-gray-500">
+                      {network.symbol}
+                    </span>
+                    {currentNetwork?.id === network.id && (
+                      <svg
+                        className="plasmo-w-4 plasmo-h-4 plasmo-text-[#c8f560]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -197,10 +249,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             {/* 余额 */}
             <div className="plasmo-text-center plasmo-py-4">
               <p className="plasmo-text-3xl plasmo-font-bold plasmo-text-[#c8f560]">
-                {accounts[selectedAccount]?.balance || "0.000 ETH"}
-              </p>
-              <p className="plasmo-text-sm plasmo-text-gray-400 plasmo-mt-1">
-                ≈ $2,000.00 USD
+                {ethBalance || "0.000 ETH"}
               </p>
             </div>
 
@@ -290,7 +339,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 </div>
                 <div className="plasmo-text-right">
                   <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
-                    {account.balance}
+                    {account.ethBalance || "0.000 ETH"}
                   </p>
                 </div>
               </button>
@@ -300,29 +349,120 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
 
         {/* Token 列表 */}
         <div className="plasmo-mt-6">
-          <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400 plasmo-mb-3">
-            Token
-          </h3>
-          <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600">
-            <div className="plasmo-flex plasmo-items-center plasmo-space-x-3 plasmo-p-4">
-              <div className="plasmo-w-10 plasmo-h-10 plasmo-bg-[#c8f560] plasmo-rounded-full plasmo-flex plasmo-items-center plasmo-justify-center">
-                <span className="plasmo-text-[#2d3142] plasmo-font-bold plasmo-text-xs">
-                  ETH
-                </span>
-              </div>
-              <div className="plasmo-flex-1">
-                <p className="plasmo-font-medium plasmo-text-gray-200">
-                  Ethereum
+          <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-mb-3">
+            <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400">
+              Token
+            </h3>
+            {tokens.length > 0 && (
+              <button
+                onClick={() => {
+                  const symbol = prompt("请输入代币符号（如 USDT、USDC）")
+                  const address = prompt("请输入代币合约地址")
+                  const decimals = prompt("请输入精度（默认 18）", "18")
+                  if (symbol && address && decimals) {
+                    addToken({
+                      address,
+                      symbol,
+                      name: symbol,
+                      decimals: parseInt(decimals, 10) || 18,
+                      type: "ERC20"
+                    })
+                  }
+                }}
+                className="plasmo-flex plasmo-items-center plasmo-space-x-1 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
+                <svg
+                  className="plasmo-w-4 plasmo-h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
+                </svg>
+                <span>添加 Token</span>
+              </button>
+            )}
+          </div>
+          <div className="plasmo-space-y-2">
+            {tokens.length === 0 && (
+              <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-6 plasmo-text-center">
+                <p className="plasmo-text-sm plasmo-text-gray-500">
+                  暂无 Token
                 </p>
-                <p className="plasmo-text-sm plasmo-text-gray-500">ETH</p>
+                <button
+                  onClick={() => {
+                    const symbol = prompt("请输入代币符号（如 USDT、USDC）")
+                    const address = prompt("请输入代币合约地址")
+                    const decimals = prompt("请输入精度（默认 18）", "18")
+                    if (symbol && address && decimals) {
+                      addToken({
+                        address,
+                        symbol,
+                        name: symbol,
+                        decimals: parseInt(decimals, 10) || 18,
+                        type: "ERC20"
+                      })
+                    }
+                  }}
+                  className="plasmo-mt-3 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
+                  + 添加第一个 Token
+                </button>
               </div>
-              <div className="plasmo-text-right">
-                <p className="plasmo-font-medium plasmo-text-gray-200">
-                  {accounts[selectedAccount]?.balance || "0.000 ETH"}
-                </p>
-                <p className="plasmo-text-sm plasmo-text-gray-500">≈ $2,000</p>
+            )}
+            {tokens.map((token) => (
+              <div
+                key={token.address}
+                className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-4 plasmo-flex plasmo-items-center plasmo-space-x-3">
+                <div className="plasmo-w-10 plasmo-h-10 plasmo-bg-[#4d5262] plasmo-rounded-full plasmo-flex plasmo-items-center plasmo-justify-center plasmo-overflow-hidden">
+                  {token.image ? (
+                    <img
+                      src={token.image}
+                      alt={token.symbol}
+                      className="plasmo-w-full plasmo-h-full plasmo-object-cover"
+                    />
+                  ) : (
+                    <span className="plasmo-text-[#c8f560] plasmo-font-bold plasmo-text-xs">
+                      {token.symbol.slice(0, 3)}
+                    </span>
+                  )}
+                </div>
+                <div className="plasmo-flex-1">
+                  <p className="plasmo-font-medium plasmo-text-gray-200">
+                    {token.name}
+                  </p>
+                  <p className="plasmo-text-sm plasmo-text-gray-500">
+                    {token.symbol}
+                  </p>
+                </div>
+                <div className="plasmo-text-right">
+                  <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
+                    {token.balance
+                      ? (Number(token.balance) / Math.pow(10, token.decimals)).toFixed(token.decimals > 6 ? 4 : token.decimals)
+                      : "0.0000"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeToken(token.address)}
+                  className="plasmo-p-1 plasmo-text-gray-500 hover:plasmo-text-red-400 plasmo-transition-colors"
+                  title="移除 Token">
+                  <svg
+                    className="plasmo-w-4 plasmo-h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -368,7 +508,10 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             </div>
 
             <button
-              onClick={() => setShowAddAccount(false)}
+              onClick={() => {
+                createAccount()
+                setShowAddAccount(false)
+              }}
               className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-semibold plasmo-rounded-xl hover:plasmo-brightness-110 plasmo-transition-colors">
               创建账户
             </button>

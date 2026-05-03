@@ -1,4 +1,5 @@
 import React from "react"
+
 import icon from "~/assets/icon.png"
 
 interface LockScreenProps {
@@ -46,17 +47,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </button>
         )}
 
-        <button
-          onClick={onCreate}
-          className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-[#3d4252] plasmo-text-[#c8f560] plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-bg-[#4d5262] plasmo-transition-all plasmo-duration-200">
-          创建新钱包
-        </button>
-
-        <button
-          onClick={onImport}
-          className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-transparent plasmo-text-gray-300 plasmo-font-semibold plasmo-rounded-xl plasmo-border-2 plasmo-border-gray-600 hover:plasmo-border-[#c8f560] hover:plasmo-text-[#c8f560] plasmo-transition-all plasmo-duration-200">
-          导入钱包
-        </button>
+        {!hasWallet && (
+          <>
+            <button
+              onClick={onCreate}
+              className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-[#3d4252] plasmo-text-[#c8f560] plasmo-font-semibold plasmo-rounded-xl plasmo-shadow-md hover:plasmo-bg-[#4d5262] plasmo-transition-all plasmo-duration-200">
+              创建新钱包
+            </button>
+            <button
+              onClick={onImport}
+              className="plasmo-w-full plasmo-py-3 plasmo-px-4 plasmo-bg-transparent plasmo-text-gray-300 plasmo-font-semibold plasmo-rounded-xl plasmo-border-2 plasmo-border-gray-600 hover:plasmo-border-[#c8f560] hover:plasmo-text-[#c8f560] plasmo-transition-all plasmo-duration-200">
+              导入钱包
+            </button>
+          </>
+        )}
       </div>
 
       {/* 底部提示 */}

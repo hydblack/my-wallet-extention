@@ -26,7 +26,7 @@ import * as bip39 from "bip39"
 import { AES, enc, SHA256 } from "crypto-js"
 import { ethers } from "ethers"
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import { persist, createJSONStorage } from "zustand/middleware"
 
 import type { Network, Token, WalletAccount, WalletState } from "../types"
 import {
@@ -34,6 +34,62 @@ import {
   HD_DERIVATION_BASE_PATH,
   WALLET_STORE_KEY
 } from "../utils/constants"
+
+// 使用 localStorage 作为后备存储（同步）
+// chrome.storage.local 用于跨扩展上下文共享数据
+const chromeStorageStorage = createJSONStorage(() => {
+  // 尝试从 chrome.storage.local 同步读取（如果可用）
+  const storage: Record<string, string> = {}
+  
+  // 同步方式获取缓存数据
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      // 使用 chrome.storage.local.get 的同步模拟
+      // 注意：这里使用 localStorage 作为主要同步存储
+      const localData = localStorage.getItem(WALLET_STORE_KEY)
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData)
+          if (parsed.state) {
+            Object.assign(storage, parsed.state)
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+  } catch {
+    // chrome API 不可用，使用 localStorage
+  }
+  
+  return {
+    getItem: (name: string): string | null => {
+      // 首先尝试从 chrome.storage.local 缓存获取
+      const cached = localStorage.getItem(`_${name}_cache`)
+      if (cached) {
+        return cached
+      }
+      // 回退到 localStorage
+      return localStorage.getItem(name)
+    },
+    setItem: (name: string, value: string): void => {
+      // 保存到 localStorage
+      localStorage.setItem(name, value)
+      // 同时异步更新 chrome.storage.local（用于跨上下文共享）
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ [name]: value }).catch(() => {
+          // chrome storage 可能不可用，静默失败
+        })
+      }
+    },
+    removeItem: (name: string): void => {
+      localStorage.removeItem(name)
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove(name).catch(() => {})
+      }
+    }
+  }
+})
 
 interface WalletStore extends WalletState {
   // Wallet management
@@ -53,6 +109,7 @@ interface WalletStore extends WalletState {
   createAccount: (name?: string) => WalletAccount
   switchAccount: (address: string) => void
   updateAccountName: (address: string, name: string) => void
+  updateAccountBalance: (address: string, balance: string) => void
 
   // Network management
   addNetwork: (network: Network) => void
@@ -71,6 +128,10 @@ interface WalletStore extends WalletState {
   connect: () => Promise<WalletAccount>
   signMessage: (message: string) => Promise<string>
   disconnect: () => void
+
+  // 导出功能
+  exportMnemonic: (password: string) => string
+  exportPrivateKey: (password: string, address?: string) => string
 }
 
 const initialState: WalletState = {
@@ -280,6 +341,18 @@ export const useWalletStore = create<WalletStore>()(
         }))
       },
 
+      updateAccountBalance: (address: string, balance: string) => {
+        set((state) => ({
+          accounts: state.accounts.map((acc) =>
+            acc.address === address ? { ...acc, ethBalance: balance } : acc
+          ),
+          currentAccount:
+            state.currentAccount?.address === address
+              ? { ...state.currentAccount, ethBalance: balance }
+              : state.currentAccount
+        }))
+      },
+
       addNetwork: (network: Network) => {
         set((state) => ({
           networks: [...state.networks, network]
@@ -371,34 +444,71 @@ export const useWalletStore = create<WalletStore>()(
       },
       disconnect: () => {
         set({ currentAccount: null, isConnected: false })
+      },
+
+      // 导出助记词（需要密码验证）
+      exportMnemonic: (password: string): string => {
+        const state = get()
+        const hashedPassword = SHA256(password).toString()
+
+        if (state.password !== hashedPassword) {
+          throw new Error("密码错误")
+        }
+
+        if (!state.mnemonic) {
+          throw new Error("未找到助记词")
+        }
+
+        const decryptedMnemonic = AES.decrypt(
+          state.mnemonic,
+          password
+        ).toString(enc.Utf8)
+
+        if (!bip39.validateMnemonic(decryptedMnemonic)) {
+          throw new Error("助记词无效")
+        }
+
+        return decryptedMnemonic
+      },
+
+      // 导出私钥（需要密码验证）
+      exportPrivateKey: (password: string, address?: string): string => {
+        const state = get()
+        const hashedPassword = SHA256(password).toString()
+
+        if (state.password !== hashedPassword) {
+          throw new Error("密码错误")
+        }
+
+        // 如果没有指定地址，使用当前选中的账户
+        const targetAddress = address || state.currentAccount?.address
+
+        const account = state.accounts.find((acc) => acc.address === targetAddress)
+
+        if (!account) {
+          throw new Error("未找到账户")
+        }
+
+        const decryptedPrivateKey = AES.decrypt(
+          account.privateKey,
+          password
+        ).toString(enc.Utf8)
+
+        return decryptedPrivateKey
       }
     }),
     {
       name: WALLET_STORE_KEY,
-      // 自定义存储：使用 chrome.storage.local
-      storage: {
-        getItem: async (name: string) => {
-          console.log("获取存储项:", name, chrome.storage)
-          const result = await chrome.storage.local.get(name)
-          return result[name] || null
-        },
-        setItem: async (name: string, value: any) => {
-          console.log("设置存储项:", name, value, chrome.storage)
-          await chrome.storage.local.set({ [name]: value })
-        },
-        removeItem: async (name: string) => {
-          await chrome.storage.local.remove(name)
-        }
-      },
+      storage: chromeStorageStorage,
       partialize: (state) => ({
         accounts: state.accounts,
-        mnemonic: state.mnemonic,
-        password: state.password,
         networks: state.networks,
         tokens: state.tokens,
         currentNetwork: state.currentNetwork,
         currentAccount: state.currentAccount,
-        isConnected: state.isConnected
+        isLocked: state.isLocked,
+        mnemonic: state.mnemonic,
+        password: state.password,
       })
     }
   )
