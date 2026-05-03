@@ -1,3 +1,4 @@
+import { ethers } from "ethers"
 import React, { useState } from "react"
 
 import icon from "~/assets/icon.png"
@@ -17,6 +18,20 @@ interface Account {
   index: number
 }
 
+interface NewTokenForm {
+  address: string
+  symbol: string
+  name: string
+  decimals: number
+}
+
+const INITIAL_TOKEN_FORM: NewTokenForm = {
+  address: "",
+  symbol: "",
+  name: "",
+  decimals: 18
+}
+
 export const MainDashboard: React.FC<MainDashboardProps> = ({
   onLock,
   onExport
@@ -25,6 +40,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   const [showMenu, setShowMenu] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showNetworkSelector, setShowNetworkSelector] = useState(false)
+  const [showAddToken, setShowAddToken] = useState(false)
+  const [newToken, setNewToken] = useState<NewTokenForm>(INITIAL_TOKEN_FORM)
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [toast, setToast] = useState<{ title: string; description?: string; variant?: "default" | "destructive" } | null>(null)
+
   const {
     lockWallet,
     accounts,
@@ -34,9 +54,92 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
     switchNetwork,
     addToken,
     removeToken,
-    tokens
+    tokens,
+    getProvider
   } = useWalletStore()
   const { ethBalance } = useWalletBalance()
+
+  const showToast = (title: string, description?: string, variant?: "default" | "destructive") => {
+    setToast({ title, description, variant })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const detectTokenInfo = async () => {
+    if (!newToken.address || !ethers.isAddress(newToken.address)) {
+      showToast("无效的合约地址", undefined, "destructive")
+      return
+    }
+
+    setIsDetecting(true)
+    try {
+      const provider = getProvider()
+      if (!provider) {
+        throw new Error("无法连接到网络")
+      }
+
+      const erc20Abi = [
+        "function name() view returns (string)",
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)"
+      ]
+
+      const contract = new ethers.Contract(newToken.address, erc20Abi, provider)
+
+      const [name, symbol, decimals] = await Promise.all([
+        contract.name(),
+        contract.symbol(),
+        contract.decimals()
+      ])
+
+      setNewToken(prev => ({
+        ...prev,
+        name,
+        symbol,
+        decimals: Number(decimals)
+      }))
+
+      showToast("代币信息检测成功", `${symbol} (${name})`)
+    } catch (error) {
+      console.error("Token detection error:", error)
+      showToast("检测失败", "无法获取代币信息，请手动填写", "destructive")
+    } finally {
+      setIsDetecting(false)
+    }
+  }
+
+  const handleAddToken = () => {
+    if (!newToken.address || !newToken.symbol || !newToken.name) {
+      showToast("请填写必填字段", "合约地址、符号和名称为必填项", "destructive")
+      return
+    }
+
+    if (!ethers.isAddress(newToken.address)) {
+      showToast("无效的合约地址", undefined, "destructive")
+      return
+    }
+
+    const token = {
+      address: newToken.address,
+      symbol: newToken.symbol,
+      name: newToken.name,
+      decimals: newToken.decimals ?? 18,
+      type: "ERC20" as const
+    }
+
+    try {
+      addToken(token)
+      setShowAddToken(false)
+      setNewToken(INITIAL_TOKEN_FORM)
+      showToast("代币添加成功！", `${token.symbol} 已添加到代币列表`)
+    } catch (error) {
+      showToast("添加失败", "无法添加代币", "destructive")
+    }
+  }
+
+  const openAddTokenDialog = () => {
+    setNewToken(INITIAL_TOKEN_FORM)
+    setShowAddToken(true)
+  }
 
   const formatAddress = (address: string) => {
     if (address.length > 12) {
@@ -351,24 +454,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
         <div className="plasmo-mt-6">
           <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-mb-3">
             <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400">
-              Token
+              代币
             </h3>
             {tokens.length > 0 && (
               <button
-                onClick={() => {
-                  const symbol = prompt("请输入代币符号（如 USDT、USDC）")
-                  const address = prompt("请输入代币合约地址")
-                  const decimals = prompt("请输入精度（默认 18）", "18")
-                  if (symbol && address && decimals) {
-                    addToken({
-                      address,
-                      symbol,
-                      name: symbol,
-                      decimals: parseInt(decimals, 10) || 18,
-                      type: "ERC20"
-                    })
-                  }
-                }}
+                onClick={openAddTokenDialog}
                 className="plasmo-flex plasmo-items-center plasmo-space-x-1 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
                 <svg
                   className="plasmo-w-4 plasmo-h-4"
@@ -382,7 +472,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                <span>添加 Token</span>
+                <span>添加代币</span>
               </button>
             )}
           </div>
@@ -390,25 +480,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             {tokens.length === 0 && (
               <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-6 plasmo-text-center">
                 <p className="plasmo-text-sm plasmo-text-gray-500">
-                  暂无 Token
+                  暂无代币
                 </p>
                 <button
-                  onClick={() => {
-                    const symbol = prompt("请输入代币符号（如 USDT、USDC）")
-                    const address = prompt("请输入代币合约地址")
-                    const decimals = prompt("请输入精度（默认 18）", "18")
-                    if (symbol && address && decimals) {
-                      addToken({
-                        address,
-                        symbol,
-                        name: symbol,
-                        decimals: parseInt(decimals, 10) || 18,
-                        type: "ERC20"
-                      })
-                    }
-                  }}
+                  onClick={openAddTokenDialog}
                   className="plasmo-mt-3 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
-                  + 添加第一个 Token
+                  + 添加第一个代币
                 </button>
               </div>
             )}
@@ -416,25 +493,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               <div
                 key={token.address}
                 className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-4 plasmo-flex plasmo-items-center plasmo-space-x-3">
-                <div className="plasmo-w-10 plasmo-h-10 plasmo-bg-[#4d5262] plasmo-rounded-full plasmo-flex plasmo-items-center plasmo-justify-center plasmo-overflow-hidden">
-                  {token.image ? (
-                    <img
-                      src={token.image}
-                      alt={token.symbol}
-                      className="plasmo-w-full plasmo-h-full plasmo-object-cover"
-                    />
-                  ) : (
-                    <span className="plasmo-text-[#c8f560] plasmo-font-bold plasmo-text-xs">
-                      {token.symbol.slice(0, 3)}
-                    </span>
-                  )}
-                </div>
                 <div className="plasmo-flex-1">
                   <p className="plasmo-font-medium plasmo-text-gray-200">
-                    {token.name}
+                    {token.symbol}
                   </p>
                   <p className="plasmo-text-sm plasmo-text-gray-500">
-                    {token.symbol}
+                    {token.name}
                   </p>
                 </div>
                 <div className="plasmo-text-right">
@@ -447,7 +511,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 <button
                   onClick={() => removeToken(token.address)}
                   className="plasmo-p-1 plasmo-text-gray-500 hover:plasmo-text-red-400 plasmo-transition-colors"
-                  title="移除 Token">
+                  title="移除代币">
                   <svg
                     className="plasmo-w-4 plasmo-h-4"
                     fill="none"
@@ -516,6 +580,156 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               创建账户
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 新增代币弹窗 */}
+      {showAddToken && (
+        <div className="plasmo-fixed plasmo-inset-0 plasmo-bg-black/60 plasmo-flex plasmo-items-center plasmo-justify-center plasmo-z-50 plasmo-p-4">
+          <div className="plasmo-bg-[#3d4252] plasmo-rounded-2xl plasmo-w-full plasmo-max-w-sm plasmo-border plasmo-border-gray-600">
+            {/* 弹窗标题 */}
+            <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-px-6 plasmo-pt-6 plasmo-pb-4 plasmo-border-b plasmo-border-gray-600">
+              <h3 className="plasmo-text-lg plasmo-font-semibold plasmo-text-gray-100">
+                添加 ERC20 代币
+              </h3>
+              <button
+                onClick={() => setShowAddToken(false)}
+                className="plasmo-p-2 plasmo-text-gray-400 hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors">
+                <svg
+                  className="plasmo-w-5 plasmo-h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="plasmo-px-6 plasmo-py-5 plasmo-space-y-4">
+              {/* 合约地址 + 检测按钮 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1">
+                  合约地址 <span className="plasmo-text-red-400">*</span>
+                </label>
+                <div className="plasmo-flex plasmo-space-x-2">
+                  <input
+                    type="text"
+                    value={newToken.address}
+                    onChange={(e) =>
+                      setNewToken(prev => ({ ...prev, address: e.target.value.trim() }))
+                    }
+                    placeholder="0x..."
+                    className="plasmo-flex-1 plasmo-min-w-0 plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                  />
+                  <button
+                    onClick={detectTokenInfo}
+                    disabled={isDetecting || !newToken.address}
+                    className="plasmo-flex-shrink-0 plasmo-px-3 plasmo-py-2 plasmo-bg-[#4d5262] plasmo-text-xs plasmo-font-medium plasmo-text-[#c8f560] plasmo-rounded-lg hover:plasmo-bg-[#5d6272] disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors plasmo-whitespace-nowrap">
+                    {isDetecting ? (
+                      <span className="plasmo-flex plasmo-items-center plasmo-space-x-1">
+                        <svg className="plasmo-w-3 plasmo-h-3 plasmo-animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="plasmo-opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="plasmo-opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>检测中</span>
+                      </span>
+                    ) : "自动检测"}
+                  </button>
+                </div>
+              </div>
+
+              {/* 代币符号 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1">
+                  代币符号 <span className="plasmo-text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newToken.symbol}
+                  onChange={(e) =>
+                    setNewToken(prev => ({ ...prev, symbol: e.target.value }))
+                  }
+                  placeholder="如 USDT"
+                  className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                />
+              </div>
+
+              {/* 代币名称 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1">
+                  代币名称 <span className="plasmo-text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newToken.name}
+                  onChange={(e) =>
+                    setNewToken(prev => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="如 Tether USD"
+                  className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                />
+              </div>
+
+              {/* 小数位数 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1">
+                  小数位数
+                  <span className="plasmo-ml-1 plasmo-text-gray-600">(默认 18)</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={18}
+                  value={newToken.decimals}
+                  onChange={(e) =>
+                    setNewToken(prev => ({
+                      ...prev,
+                      decimals: parseInt(e.target.value, 10) || 0
+                    }))
+                  }
+                  className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* 底部按钮 */}
+            <div className="plasmo-flex plasmo-space-x-3 plasmo-px-6 plasmo-pb-6">
+              <button
+                onClick={() => setShowAddToken(false)}
+                className="plasmo-flex-1 plasmo-py-2.5 plasmo-px-4 plasmo-bg-[#4d5262] plasmo-text-gray-300 plasmo-text-sm plasmo-font-medium plasmo-rounded-xl hover:plasmo-bg-[#5d6272] plasmo-transition-colors">
+                取消
+              </button>
+              <button
+                onClick={handleAddToken}
+                disabled={!newToken.address || !newToken.symbol || !newToken.name}
+                className="plasmo-flex-1 plasmo-py-2.5 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-text-sm plasmo-font-semibold plasmo-rounded-xl hover:plasmo-brightness-110 disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors">
+                添加代币
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast 提示 */}
+      {toast && (
+        <div
+          className={`plasmo-fixed plasmo-bottom-4 plasmo-left-1/2 plasmo-z-[60] plasmo-w-[calc(100%-2rem)] plasmo-max-w-xs plasmo-rounded-xl plasmo-px-4 plasmo-py-3 plasmo-shadow-lg plasmo-transition-all plasmo-border ${
+            toast.variant === "destructive"
+              ? "plasmo-bg-red-900/90 plasmo-border-red-700 plasmo-text-red-100"
+              : "plasmo-bg-[#3d4252] plasmo-border-[#c8f560]/30 plasmo-text-gray-100"
+          }`}
+          style={{ transform: "translateX(-50%)" }}>
+          <p className="plasmo-text-sm plasmo-font-medium">{toast.title}</p>
+          {toast.description && (
+            <p className="plasmo-text-xs plasmo-mt-0.5 plasmo-opacity-80">
+              {toast.description}
+            </p>
+          )}
         </div>
       )}
     </div>

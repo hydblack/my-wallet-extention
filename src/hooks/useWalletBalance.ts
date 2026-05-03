@@ -37,6 +37,10 @@ export const useWalletBalance = () => {
 
   // 使用 ref 追踪已标记的无效 token，避免重复报错
   const invalidTokensRef = useRef<Set<string>>(new Set())
+  // 已完成余额查询的 token 地址集合，避免因 balance 字段变化导致重复请求
+  const fetchedTokensRef = useRef<Set<string>>(new Set())
+  // 追踪当前 token 地址列表，用于检测新增 token
+  const prevTokenAddressesRef = useRef<Set<string>>(new Set())
 
   const fetchEthBalance = useCallback(async () => {
     if (!currentAccount || !currentNetwork) return
@@ -104,29 +108,51 @@ export const useWalletBalance = () => {
     }
   }, [currentAccount, currentNetwork, getProvider, updateTokenBalance])
 
-  const fetchAllTokenBalances = useCallback(async () => {
-    if (!tokens.length) return
+  const fetchAllTokenBalances = useCallback(async (tokenList: Token[]) => {
+    if (!tokenList.length) return
 
     setIsLoading(true)
     try {
-      await Promise.all(tokens.map((token) => fetchTokenBalance(token)))
+      await Promise.all(tokenList.map((token) => fetchTokenBalance(token)))
     } catch (error) {
       console.error("Failed to fetch token balances:", error)
     } finally {
       setIsLoading(false)
     }
-  }, [tokens, fetchTokenBalance])
+  }, [fetchTokenBalance])
 
   const refreshBalances = useCallback(async () => {
-    await Promise.all([fetchEthBalance(), fetchAllTokenBalances()])
-  }, [fetchEthBalance, fetchAllTokenBalances])
+    await Promise.all([fetchEthBalance(), fetchAllTokenBalances(tokens)])
+  }, [fetchEthBalance, fetchAllTokenBalances, tokens])
 
-  // 当账户、网络或 token 列表变化时刷新余额
+  // 账户或网络切换时：重置缓存，全量刷新余额
   useEffect(() => {
-    if (currentAccount) {
-      refreshBalances()
-    }
-  }, [currentAccount, currentNetwork, refreshBalances])
+    if (!currentAccount) return
+    invalidTokensRef.current.clear()
+    fetchedTokensRef.current.clear()
+    prevTokenAddressesRef.current.clear()
+    fetchEthBalance()
+    // 全量拉一次 token 余额，并记录已拉取的地址
+    const currentTokens = useWalletStore.getState().tokens
+    currentTokens.forEach((t) => prevTokenAddressesRef.current.add(t.address))
+    fetchAllTokenBalances(currentTokens)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentAccount?.address, currentNetwork?.id])
+
+  // token 列表变化时：只对新增的 token 发起余额查询，避免循环
+  useEffect(() => {
+    const prevAddresses = prevTokenAddressesRef.current
+    const newTokens = tokens.filter((t) => !prevAddresses.has(t.address))
+    if (newTokens.length === 0) return
+
+    // 更新已知地址集合
+    tokens.forEach((t) => prevAddresses.add(t.address))
+
+    // 只查新增的 token
+    fetchAllTokenBalances(newTokens)
+  // fetchAllTokenBalances 和 tokens 同步变化，用地址列表做 key 防循环
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens.map((t) => t.address).join(",")])
 
   return {
     ethBalance,
