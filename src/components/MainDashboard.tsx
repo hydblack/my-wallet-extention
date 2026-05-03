@@ -1,5 +1,6 @@
+import { AES, enc } from "crypto-js"
 import { ethers } from "ethers"
-import React, { useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 
 import icon from "~/assets/icon.png"
 
@@ -36,30 +37,62 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   onLock,
   onExport
 }) => {
-  const [selectedAccount, setSelectedAccount] = useState(0)
   const [showMenu, setShowMenu] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showNetworkSelector, setShowNetworkSelector] = useState(false)
   const [showAddToken, setShowAddToken] = useState(false)
   const [newToken, setNewToken] = useState<NewTokenForm>(INITIAL_TOKEN_FORM)
   const [isDetecting, setIsDetecting] = useState(false)
-  const [toast, setToast] = useState<{ title: string; description?: string; variant?: "default" | "destructive" } | null>(null)
+  const [toast, setToast] = useState<{
+    title: string
+    description?: string
+    variant?: "default" | "destructive"
+  } | null>(null)
+
+  // ── 转账相关状态 ──
+  const [showSendModal, setShowSendModal] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [sendForm, setSendForm] = useState({
+    to: "",
+    amount: "",
+  })
+  const [sendPassword, setSendPassword] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [txHash, setTxHash] = useState("")
+  // ── 自动计算的 Gas 信息 ──
+  const [estimatedGasLimit, setEstimatedGasLimit] = useState<bigint | null>(null)
+  const [feeData, setFeeData] = useState<{
+    gasPrice: bigint | null
+    maxFeePerGas: bigint | null
+    maxPriorityFeePerGas: bigint | null
+  } | null>(null)
+  const [isEstimatingGas, setIsEstimatingGas] = useState(false)
 
   const {
     lockWallet,
     accounts,
     createAccount,
+    currentAccount,
     currentNetwork,
     networks,
     switchNetwork,
+    switchAccount,
     addToken,
     removeToken,
     tokens,
-    getProvider
+    getProvider,
+    isValidPassword
   } = useWalletStore()
-  const { ethBalance } = useWalletBalance()
+  const { ethBalance, refreshBalances } = useWalletBalance()
+  console.log("MainDashboard - currentAccount:", currentAccount)
+  console.log("MainDashboard - ethBalance:", ethBalance)
+  console.log("MainDashboard - tokens:", tokens)
 
-  const showToast = (title: string, description?: string, variant?: "default" | "destructive") => {
+  const showToast = (
+    title: string,
+    description?: string,
+    variant?: "default" | "destructive"
+  ) => {
     setToast({ title, description, variant })
     setTimeout(() => setToast(null), 3000)
   }
@@ -91,7 +124,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
         contract.decimals()
       ])
 
-      setNewToken(prev => ({
+      setNewToken((prev) => ({
         ...prev,
         name,
         symbol,
@@ -139,6 +172,178 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   const openAddTokenDialog = () => {
     setNewToken(INITIAL_TOKEN_FORM)
     setShowAddToken(true)
+  }
+
+  // ── 转账辅助函数 ──
+
+  // ── Gas 自动估算（MetaMask 风格）──
+  // 获取网络费率 + 自动估算 Gas Limit，无需用户手动输入
+  const fetchGasAndEstimate = useCallback(async () => {
+    const provider = getProvider()
+    if (!provider || !sendForm.to || !sendForm.amount) return
+    if (!ethers.isAddress(sendForm.to) || parseFloat(sendForm.amount) <= 0) return
+
+    setIsEstimatingGas(true)
+    try {
+      // 1. 获取网络费率（EIP-1559 自动用 maxFeePerGas，旧链用 gasPrice）
+      const fee = await provider.getFeeData()
+      setFeeData({
+        gasPrice: fee.gasPrice,
+        maxFeePerGas: fee.maxFeePerGas,
+        maxPriorityFeePerGas: fee.maxPriorityFeePerGas,
+      })
+
+      // 2. 构造 tx 对象，用 eth_estimateGas 获取 Gas Limit
+      const txRequest: ethers.TransactionRequest = {
+        from: currentAccount?.address,
+        to: sendForm.to,
+        value: ethers.parseEther(sendForm.amount),
+      }
+
+      const estimated = await provider.estimateGas(txRequest)
+      // MetaMask 会留 ~20% 余量，防止合约内部状态变化导致 out of gas
+      setEstimatedGasLimit((estimated * 120n) / 100n)
+    } catch (e) {
+      // 估算失败时使用安全默认值
+      setEstimatedGasLimit(21000n)
+      if (!feeData) {
+        setFeeData({
+          gasPrice: ethers.parseUnits("5", "gwei"),
+          maxFeePerGas: null,
+          maxPriorityFeePerGas: null,
+        })
+      }
+    } finally {
+      setIsEstimatingGas(false)
+    }
+  }, [getProvider, sendForm.to, sendForm.amount, currentAccount])
+
+  const openSendModal = () => {
+    setSendForm({ to: "", amount: "" })
+    setSendPassword("")
+    setTxHash("")
+    setShowSendModal(true)
+    setShowConfirmDialog(false)
+    setEstimatedGasLimit(null)
+    setFeeData(null)
+  }
+
+  // 表单关键字段变化时自动重新估算 Gas
+  useEffect(() => {
+    if (
+      sendForm.to &&
+      sendForm.amount &&
+      ethers.isAddress(sendForm.to) &&
+      parseFloat(sendForm.amount) > 0
+    ) {
+      fetchGasAndEstimate()
+    } else {
+      setEstimatedGasLimit(null)
+      setFeeData(null)
+    }
+  }, [sendForm.to, sendForm.amount, fetchGasAndEstimate])
+
+  const getTokenBalance = () => {
+    const raw = ethBalance?.replace(/[^\d.]/g, "") || "0"
+    return raw
+  }
+
+  // 计算当前预估手续费（ETH 单位，最多 8 位小数）
+  const estimateGasFee = (): string => {
+    if (!estimatedGasLimit || !feeData) return "计算中..."
+    const gasLimit = estimatedGasLimit
+    const pricePerUnit = feeData.maxFeePerGas || feeData.gasPrice || 0n
+    const feeWei = gasLimit * pricePerUnit
+    // 转成 ETH 字符串，去掉末尾多余的 0
+    const ethStr = ethers.formatEther(feeWei)
+    const num = parseFloat(ethStr)
+    if (isNaN(num)) return "0.00000000 ETH"
+    // 最多保留 8 位小数，去掉末尾零
+    return `${parseFloat(num.toFixed(8))} ETH`
+  }
+
+  const isValidSendForm = () => {
+    if (!sendForm.to || !sendForm.amount || parseFloat(sendForm.amount) <= 0)
+      return false
+    if (!ethers.isAddress(sendForm.to)) return false
+    return true
+  }
+
+  const handleSendSubmit = () => {
+    if (!isValidSendForm()) {
+      showToast("请填写完整且有效的转账信息", undefined, "destructive")
+      return
+    }
+    setShowConfirmDialog(true)
+  }
+
+  const resetSendState = () => {
+    setShowSendModal(false)
+    setShowConfirmDialog(false)
+    setSendPassword("")
+    setIsSending(false)
+  }
+
+  const executeTransaction = async () => {
+    if (!sendPassword) {
+      showToast("请输入密码", undefined, "destructive")
+      return
+    }
+
+    if (!isValidPassword(sendPassword)) {
+      showToast("密码错误", "请检查您的密码", "destructive")
+      return
+    }
+
+    if (!currentAccount) return
+
+    setIsSending(true)
+    try {
+      const provider = getProvider()
+      if (!provider) throw new Error("无法连接到网络")
+
+      const decryptedPrivateKey = AES.decrypt(
+        currentAccount.privateKey,
+        sendPassword
+      ).toString(enc.Utf8)
+
+      const wallet = new ethers.Wallet(decryptedPrivateKey, provider)
+
+      // ETH 转账
+      const tx = await wallet.sendTransaction({
+        to: sendForm.to,
+        value: ethers.parseEther(sendForm.amount),
+        gasLimit: estimatedGasLimit || 21000n,
+        ...(feeData?.maxFeePerGas
+          ? {
+              maxFeePerGas: feeData.maxFeePerGas,
+              maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || 0n,
+            }
+          : { gasPrice: feeData?.gasPrice || ethers.parseUnits("5", "gwei") }),
+      })
+
+      setTxHash(tx.hash)
+      showToast("交易已发送", `交易哈希: ${tx.hash.slice(0, 10)}...`)
+
+      // 等待交易确认
+      await tx.wait()
+
+      // 交易成功后：关闭弹窗 + 刷新余额
+      showToast("交易成功！", "交易已被确认")
+      resetSendState()
+      // 刷新余额
+      refreshBalances()
+    } catch (error: any) {
+      console.error("Transaction error:", error)
+      showToast(
+        "交易失败",
+        error?.message || "发送交易时出现错误",
+        "destructive"
+      )
+    } finally {
+      setIsSending(false)
+      setSendPassword("")
+    }
   }
 
   const formatAddress = (address: string) => {
@@ -316,22 +521,20 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               <div className="plasmo-flex plasmo-items-center plasmo-space-x-3">
                 <div className="plasmo-w-10 plasmo-h-10 plasmo-bg-[#c8f560] plasmo-rounded-full plasmo-flex plasmo-items-center plasmo-justify-center">
                   <span className="plasmo-text-[#2d3142] plasmo-font-semibold">
-                    {accounts[selectedAccount]?.name.charAt(0)}
+                    {currentAccount?.name.charAt(0)}
                   </span>
                 </div>
                 <div>
                   <h3 className="plasmo-font-semibold plasmo-text-gray-100">
-                    {accounts[selectedAccount]?.name}
+                    {currentAccount?.name}
                   </h3>
                   <p className="plasmo-text-sm plasmo-text-gray-400">
-                    {formatAddress(accounts[selectedAccount]?.address || "")}
+                    {formatAddress(currentAccount?.address || "")}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() =>
-                  copyAddress(accounts[selectedAccount]?.address || "")
-                }
+                onClick={() => copyAddress(currentAccount?.address || "")}
                 className="plasmo-p-2 plasmo-text-gray-400 hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors"
                 title="复制地址">
                 <svg
@@ -352,13 +555,15 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             {/* 余额 */}
             <div className="plasmo-text-center plasmo-py-4">
               <p className="plasmo-text-3xl plasmo-font-bold plasmo-text-[#c8f560]">
-                {ethBalance || "0.000 ETH"}
+                {ethBalance || "0.0000 ETH"}
               </p>
             </div>
 
             {/* 操作按钮 */}
             <div className="plasmo-grid plasmo-grid-cols-2 plasmo-gap-3 plasmo-mt-4">
-              <button className="plasmo-flex plasmo-items-center plasmo-justify-center plasmo-space-x-2 plasmo-py-2 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-medium plasmo-rounded-xl hover:plasmo-brightness-110 plasmo-transition-colors">
+              <button
+                onClick={openSendModal}
+                className="plasmo-flex plasmo-items-center plasmo-justify-center plasmo-space-x-2 plasmo-py-2 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-medium plasmo-rounded-xl hover:plasmo-brightness-110 plasmo-transition-colors">
                 <svg
                   className="plasmo-w-5 plasmo-h-5"
                   fill="none"
@@ -373,7 +578,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 </svg>
                 <span>发送</span>
               </button>
-              <button className="plasmo-flex plasmo-items-center plasmo-justify-center plasmo-space-x-2 plasmo-py-2 plasmo-px-4 plasmo-bg-[#4d5262] plasmo-text-gray-200 plasmo-font-medium plasmo-rounded-xl hover:plasmo-bg-[#5d6272] plasmo-transition-colors">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(currentAccount?.address || "")
+                  showToast("地址已复制", undefined)
+                }}
+                className="plasmo-flex plasmo-items-center plasmo-justify-center plasmo-space-x-2 plasmo-py-2 plasmo-px-4 plasmo-bg-[#4d5262] plasmo-text-gray-200 plasmo-font-medium plasmo-rounded-xl hover:plasmo-bg-[#5d6272] plasmo-transition-colors">
                 <svg
                   className="plasmo-w-5 plasmo-h-5"
                   fill="none"
@@ -386,7 +596,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                     d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                   />
                 </svg>
-                <span>接收</span>
+                <span>复制地址</span>
               </button>
             </div>
           </div>
@@ -421,9 +631,9 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             {accounts.map((account, index) => (
               <button
                 key={index}
-                onClick={() => setSelectedAccount(index)}
+                onClick={() => switchAccount(account.address)}
                 className={`plasmo-w-full plasmo-flex plasmo-items-center plasmo-space-x-3 plasmo-p-3 plasmo-rounded-xl plasmo-transition-all ${
-                  selectedAccount === index
+                  currentAccount?.address === account.address
                     ? "plasmo-bg-[#4d5262] plasmo-border plasmo-border-[#c8f560]/30"
                     : "plasmo-bg-[#3d4252] plasmo-border plasmo-border-gray-600 hover:plasmo-bg-[#4d5262]"
                 }`}>
@@ -442,7 +652,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 </div>
                 <div className="plasmo-text-right">
                   <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
-                    {account.ethBalance || "0.000 ETH"}
+                    {account.ethBalance || "0.0000 ETH"}
                   </p>
                 </div>
               </button>
@@ -479,9 +689,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
           <div className="plasmo-space-y-2">
             {tokens.length === 0 && (
               <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-6 plasmo-text-center">
-                <p className="plasmo-text-sm plasmo-text-gray-500">
-                  暂无代币
-                </p>
+                <p className="plasmo-text-sm plasmo-text-gray-500">暂无代币</p>
                 <button
                   onClick={openAddTokenDialog}
                   className="plasmo-mt-3 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
@@ -503,9 +711,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 </div>
                 <div className="plasmo-text-right">
                   <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
-                    {token.balance
-                      ? (Number(token.balance) / Math.pow(10, token.decimals)).toFixed(token.decimals > 6 ? 4 : token.decimals)
-                      : "0.0000"}
+                    {token.balance ? Number(token.balance).toFixed(4) : "0.0000"}
                   </p>
                 </div>
                 <button
@@ -621,7 +827,10 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                     type="text"
                     value={newToken.address}
                     onChange={(e) =>
-                      setNewToken(prev => ({ ...prev, address: e.target.value.trim() }))
+                      setNewToken((prev) => ({
+                        ...prev,
+                        address: e.target.value.trim()
+                      }))
                     }
                     placeholder="0x..."
                     className="plasmo-flex-1 plasmo-min-w-0 plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
@@ -632,13 +841,29 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                     className="plasmo-flex-shrink-0 plasmo-px-3 plasmo-py-2 plasmo-bg-[#4d5262] plasmo-text-xs plasmo-font-medium plasmo-text-[#c8f560] plasmo-rounded-lg hover:plasmo-bg-[#5d6272] disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors plasmo-whitespace-nowrap">
                     {isDetecting ? (
                       <span className="plasmo-flex plasmo-items-center plasmo-space-x-1">
-                        <svg className="plasmo-w-3 plasmo-h-3 plasmo-animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="plasmo-opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="plasmo-opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        <svg
+                          className="plasmo-w-3 plasmo-h-3 plasmo-animate-spin"
+                          fill="none"
+                          viewBox="0 0 24 24">
+                          <circle
+                            className="plasmo-opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="plasmo-opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          />
                         </svg>
                         <span>检测中</span>
                       </span>
-                    ) : "自动检测"}
+                    ) : (
+                      "自动检测"
+                    )}
                   </button>
                 </div>
               </div>
@@ -652,7 +877,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                   type="text"
                   value={newToken.symbol}
                   onChange={(e) =>
-                    setNewToken(prev => ({ ...prev, symbol: e.target.value }))
+                    setNewToken((prev) => ({ ...prev, symbol: e.target.value }))
                   }
                   placeholder="如 USDT"
                   className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
@@ -668,7 +893,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                   type="text"
                   value={newToken.name}
                   onChange={(e) =>
-                    setNewToken(prev => ({ ...prev, name: e.target.value }))
+                    setNewToken((prev) => ({ ...prev, name: e.target.value }))
                   }
                   placeholder="如 Tether USD"
                   className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
@@ -679,7 +904,9 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               <div>
                 <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1">
                   小数位数
-                  <span className="plasmo-ml-1 plasmo-text-gray-600">(默认 18)</span>
+                  <span className="plasmo-ml-1 plasmo-text-gray-600">
+                    (默认 18)
+                  </span>
                 </label>
                 <input
                   type="number"
@@ -687,7 +914,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                   max={18}
                   value={newToken.decimals}
                   onChange={(e) =>
-                    setNewToken(prev => ({
+                    setNewToken((prev) => ({
                       ...prev,
                       decimals: parseInt(e.target.value, 10) || 0
                     }))
@@ -706,7 +933,9 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               </button>
               <button
                 onClick={handleAddToken}
-                disabled={!newToken.address || !newToken.symbol || !newToken.name}
+                disabled={
+                  !newToken.address || !newToken.symbol || !newToken.name
+                }
                 className="plasmo-flex-1 plasmo-py-2.5 plasmo-px-4 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-text-sm plasmo-font-semibold plasmo-rounded-xl hover:plasmo-brightness-110 disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors">
                 添加代币
               </button>
@@ -715,7 +944,243 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
         </div>
       )}
 
-      {/* Toast 提示 */}
+      {/* 发送弹窗 */}
+      {showSendModal && !showConfirmDialog && (
+        <div className="plasmo-fixed plasmo-inset-0 plasmo-bg-black/60 plasmo-flex plasmo-items-center plasmo-justify-center plasmo-z-50 plasmo-p-4">
+          <div className="plasmo-bg-[#3d4252] plasmo-rounded-2xl plasmo-w-full plasmo-max-w-sm plasmo-border plasmo-border-gray-600">
+            {/* 标题栏 */}
+            <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-px-5 plasmo-pt-5 plasmo-pb-4 plasmo-border-b plasmo-border-gray-600">
+              <h3 className="plasmo-text-base plasmo-font-semibold plasmo-text-gray-100">
+                发送
+              </h3>
+              <button
+                onClick={resetSendState}
+                className="plasmo-p-1.5 plasmo-text-gray-400 hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors">
+                <svg
+                  className="plasmo-w-5 plasmo-h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="plasmo-px-5 plasmo-py-4 plasmo-space-y-3">
+              {/* 资产（仅支持 ETH） */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1.5">
+                  资产
+                </label>
+                <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-px-3 plasmo-py-2.5 plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg">
+                  <span className="plasmo-flex plasmo-items-center plasmo-space-x-2">
+                    <div className="plasmo-w-5 plasmo-h-5 plasmo-bg-[#c8f560] plasmo-rounded-full" />
+                    <span className="plasmo-text-sm plasmo-text-gray-200">ETH</span>
+                  </span>
+                  <span className="plasmo-text-xs plasmo-text-gray-500">
+                    余额: {getTokenBalance()}
+                  </span>
+                </div>
+              </div>
+
+              {/* 收款地址 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1.5">
+                  收款地址
+                </label>
+                <input
+                  type="text"
+                  value={sendForm.to}
+                  onChange={(e) =>
+                    setSendForm((f) => ({ ...f, to: e.target.value.trim() }))
+                  }
+                  placeholder="0x..."
+                  className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2.5 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors plasmo-font-mono"
+                />
+              </div>
+
+              {/* 金额 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1.5">
+                  金额
+                </label>
+                <div className="plasmo-relative">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={sendForm.amount}
+                    onChange={(e) =>
+                      setSendForm((f) => ({ ...f, amount: e.target.value }))
+                    }
+                    placeholder="0.0"
+                    className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2.5 plasmo-pr-16 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                  />
+                  <span className="plasmo-absolute plasmo-right-3 plasmo-top-1/2 plasmo--translate-y-1/2 plasmo-text-xs plasmo-text-gray-500">
+                    ETH
+                  </span>
+                </div>
+              </div>
+
+              {/* 手续费（自动估算） */}
+              <div className="plasmo-space-y-2">
+                <div className="plasmo-flex plasmo-items-center plasmo-justify-between">
+                  <span className="plasmo-text-xs plasmo-font-medium plasmo-text-gray-400">
+                    网络手续费
+                  </span>
+                  {isEstimatingGas && (
+                    <span className="plasmo-text-xs plasmo-text-gray-500">估算中...</span>
+                  )}
+                </div>
+                <div className="plasmo-bg-[#2d3142] plasmo-rounded-lg plasmo-px-3 plasmo-py-2.5 plasmo-text-center">
+                  <span className="plasmo-text-sm plasmo-font-semibold plasmo-text-[#c8f560]">
+                    {isEstimatingGas
+                      ? "计算中..."
+                      : (estimatedGasLimit
+                          ? `${estimateGasFee()} ETH`
+                          : "填写收款地址和金额后自动计算")}
+                  </span>
+                  {feeData && estimatedGasLimit && (
+                    <p className="plasmo-text-[11px] plasmo-text-gray-500 plasmo-mt-1">
+                      Gas Limit: {estimatedGasLimit.toString()}{" "}
+                      · {feeData.maxFeePerGas ? "EIP-1559" : "Legacy"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 底部按钮 */}
+            <div className="plasmo-px-5 plasmo-pb-5">
+              <button
+                onClick={handleSendSubmit}
+                disabled={!isValidSendForm()}
+                className="plasmo-w-full plasmo-py-2.5 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-font-semibold plasmo-rounded-xl hover:plasmo-brightness-110 disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors">
+                继续
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 确认对话框 */}
+      {showSendModal && showConfirmDialog && (
+        <div className="plasmo-fixed plasmo-inset-0 plasmo-bg-black/60 plasmo-flex plasmo-items-center plasmo-justify-center plasmo-z-50 plasmo-p-4">
+          <div className="plasmo-bg-[#3d4252] plasmo-rounded-2xl plasmo-w-full plasmo-max-w-sm plasmo-border plasmo-border-gray-600">
+            {/* 标题栏 */}
+            <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-px-5 plasmo-pt-5 plasmo-pb-4 plasmo-border-b plasmo-border-gray-600">
+              <div className="plasmo-flex plasmo-items-center plasmo-space-x-2">
+                <svg
+                  className="plasmo-w-5 plasmo-h-5"
+                  fill="none"
+                  stroke="#f59e0b"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
+                </svg>
+                <h3 className="plasmo-text-base plasmo-font-semibold plasmo-text-gray-100">
+                  确认交易
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                className="plasmo-p-1.5 plasmo-text-gray-400 hover:plasmo-bg-gray-700 plasmo-rounded-lg plasmo-transition-colors">
+                <svg
+                  className="plasmo-w-5 plasmo-h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="plasmo-px-5 plasmo-py-4 plasmo-space-y-3">
+              {/* 交易信息 */}
+              <div className="plasmo-bg-[#2d3142] plasmo-p-4 plasmo-rounded-xl plasmo-space-y-2">
+                <div className="plasmo-flex plasmo-justify-between">
+                  <span className="plasmo-text-xs plasmo-text-gray-500">
+                    从
+                  </span>
+                  <span className="plasmo-text-xs plasmo-text-gray-300 plasmo-font-mono">
+                    {currentAccount?.address.slice(0, 8)}...
+                    {currentAccount?.address.slice(-4)}
+                  </span>
+                </div>
+                <div className="plasmo-flex plasmo-justify-between">
+                  <span className="plasmo-text-xs plasmo-text-gray-500">
+                    到
+                  </span>
+                  <span className="plasmo-text-xs plasmo-text-gray-300 plasmo-font-mono">
+                    {sendForm.to.slice(0, 8)}...{sendForm.to.slice(-4)}
+                  </span>
+                </div>
+                <div className="plasmo-flex plasmo-justify-between">
+                  <span className="plasmo-text-xs plasmo-text-gray-500">
+                    金额
+                  </span>
+                  <span className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-200">
+                    {sendForm.amount} ETH
+                  </span>
+                </div>
+                <div className="plasmo-flex plasmo-justify-between">
+                  <span className="plasmo-text-xs plasmo-text-gray-500">
+                    手续费
+                  </span>
+                  <span className="plasmo-text-xs plasmo-text-gray-400">
+                    {estimateGasFee()} ETH
+                  </span>
+                </div>
+              </div>
+
+              {/* 密码 */}
+              <div>
+                <label className="plasmo-block plasmo-text-xs plasmo-font-medium plasmo-text-gray-400 plasmo-mb-1.5">
+                  确认密码
+                </label>
+                <input
+                  type="password"
+                  value={sendPassword}
+                  onChange={(e) => setSendPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && executeTransaction()}
+                  placeholder="输入钱包密码"
+                  className="plasmo-w-full plasmo-bg-[#2d3142] plasmo-border plasmo-border-gray-600 plasmo-rounded-lg plasmo-px-3 plasmo-py-2.5 plasmo-text-sm plasmo-text-gray-200 plasmo-placeholder-gray-600 focus:plasmo-outline-none focus:plasmo-border-[#c8f560] plasmo-transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* 底部按钮 */}
+            <div className="plasmo-flex plasmo-space-x-3 plasmo-px-5 plasmo-pb-5">
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                disabled={isSending}
+                className="plasmo-flex-1 plasmo-py-2.5 plasmo-bg-[#4d5262] plasmo-text-gray-300 plasmo-text-sm plasmo-font-medium plasmo-rounded-xl hover:plasmo-bg-[#5d6272] disabled:plasmo-opacity-50 plasmo-transition-colors">
+                取消
+              </button>
+              <button
+                onClick={executeTransaction}
+                disabled={isSending || !sendPassword}
+                className="plasmo-flex-1 plasmo-py-2.5 plasmo-bg-[#c8f560] plasmo-text-[#2d3142] plasmo-text-sm plasmo-font-semibold plasmo-rounded-xl hover:plasmo-brightness-110 disabled:plasmo-opacity-40 disabled:plasmo-cursor-not-allowed plasmo-transition-colors">
+                {isSending ? "发送中..." : "确认发送"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && (
         <div
           className={`plasmo-fixed plasmo-bottom-4 plasmo-left-1/2 plasmo-z-[60] plasmo-w-[calc(100%-2rem)] plasmo-max-w-xs plasmo-rounded-xl plasmo-px-4 plasmo-py-3 plasmo-shadow-lg plasmo-transition-all plasmo-border ${

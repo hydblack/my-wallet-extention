@@ -6,22 +6,22 @@ import type { Token } from "../types"
 
 /**
  * 格式化 ETH 余额
- * - 处理 0.0, 0.00 等情况，统一显示为 "0.000 ETH"
- * - 保留最多 6 位小数
+ * - 处理 0.0, 0.00 等情况，统一显示为 "0.0000 ETH"
+ * - 保留最多 4 位小数
  * @param balance 原始余额字符串（如 "0", "1.23456789", "0.0"）
- * @returns 格式化后的字符串（如 "0.000 ETH", "1.234 ETH"）
+ * @returns 格式化后的字符串（如 "0.0000 ETH", "1.2345 ETH"）
  */
 const formatEthBalance = (balance: string | undefined): string => {
   if (!balance || balance === "0" || balance === "0.0" || balance === "0.00") {
-    return "0.000 ETH"
+    return "0.0000 ETH"
   }
-  // 保留最多 6 位小数，去除尾部多余的 0
+  // 保留最多 4 位小数，去除尾部多余的 0
   const num = parseFloat(balance)
   if (isNaN(num)) {
-    return "0.000 ETH"
+    return "0.0000 ETH"
   }
-  // 使用正则保留最多 6 位小数
-  const formatted = num.toFixed(6).replace(/\.?0+$/, "")
+  // 使用正则保留最多 4 位小数
+  const formatted = num.toFixed(4).replace(/\.?0+$/, "")
   return `${formatted} ETH`
 }
 
@@ -32,7 +32,7 @@ export const useWalletBalance = () => {
   const tokens = useWalletStore((s) => s.tokens)
   const updateTokenBalance = useWalletStore((s) => s.updateTokenBalance)
   const updateAccountBalance = useWalletStore((s) => s.updateAccountBalance)
-  const [ethBalance, setEthBalance] = useState<string>("0.000 ETH")
+  const [ethBalance, setEthBalance] = useState<string>("0.0000 ETH")
   const [isLoading, setIsLoading] = useState(false)
 
   // 使用 ref 追踪已标记的无效 token，避免重复报错
@@ -51,6 +51,7 @@ export const useWalletBalance = () => {
       if (!provider) return
 
       const balance = await provider.getBalance(currentAccount.address)
+      console.log(`Fetched ETH balance for ${currentAccount.address} on ${currentNetwork.name}:`, balance.toString())
       const rawBalance = ethers.formatEther(balance)
       const formattedBalance = formatEthBalance(rawBalance)
       setEthBalance(formattedBalance)
@@ -58,8 +59,8 @@ export const useWalletBalance = () => {
       updateAccountBalance(currentAccount.address, formattedBalance)
     } catch (error) {
       console.error("Failed to fetch ETH balance:", error)
-      setEthBalance("0.000 ETH")
-      updateAccountBalance(currentAccount.address, "0.000 ETH")
+      setEthBalance("0.0000 ETH")
+      updateAccountBalance(currentAccount.address, "0.0000 ETH")
     } finally {
       setIsLoading(false)
     }

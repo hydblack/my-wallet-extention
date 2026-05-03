@@ -37,7 +37,7 @@ import {
 
 // 使用 localStorage 作为后备存储（同步）
 // chrome.storage.local 用于跨扩展上下文共享数据
-const chromeStorageStorage = createJSONStorage(() => {
+const chromeStorageLocal = createJSONStorage(() => {
   // 尝试从 chrome.storage.local 同步读取（如果可用）
   const storage: Record<string, string> = {}
   
@@ -499,7 +499,7 @@ export const useWalletStore = create<WalletStore>()(
     }),
     {
       name: WALLET_STORE_KEY,
-      storage: chromeStorageStorage,
+      storage: chromeStorageLocal,
       partialize: (state) => ({
         accounts: state.accounts,
         networks: state.networks,
