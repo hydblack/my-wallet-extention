@@ -9,13 +9,31 @@ import { useWalletStore } from './stores/walletStore';
 
 type View = 'lock' | 'unlock' | 'create' | 'import' | 'dashboard';
 
+// DApp 连接请求通知组件
+const DAppConnectionNotifier: React.FC<{ isConnected: boolean; currentAccount: unknown }> = ({ isConnected, currentAccount }) => {
+  useEffect(() => {
+    if (isConnected && currentAccount) {
+      // 通知 background DApp 连接成功
+      console.log('📤 通知 DApp 连接成功:', currentAccount);
+      chrome.runtime.sendMessage({
+        type: 'DAPP_CONNECTION_SUCCESS',
+        data: { account: currentAccount }
+      }).catch(() => {
+        // 忽略发送失败（可能 background 已经通过 storage 监听到了）
+      });
+    }
+  }, [isConnected, currentAccount]);
+
+  return null;
+};
+
 function WalletApp() {
   const [currentView, setCurrentView] = useState<View>('lock');
   const [exportType, setExportType] = useState<'mnemonic' | 'privateKey' | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // 从 store 读取钱包状态
-  const { accounts, isLocked, lockWallet } = useWalletStore();
+  const { accounts, isLocked, lockWallet, isConnected, currentAccount } = useWalletStore();
   const hasWallet = accounts.length > 0;
 
   // 初始化时根据钱包状态决定显示哪个页面
@@ -34,6 +52,20 @@ function WalletApp() {
       setIsInitialized(true);
     }
   }, [hasWallet, isLocked, isInitialized]);
+
+  // 当从 lock/unlock/create/import 切换到 dashboard 时，通知 background
+  useEffect(() => {
+    if (currentView === 'dashboard' && currentAccount) {
+      // 通知 background DApp 连接成功
+      console.log('📤 钱包已就绪，通知 DApp:', currentAccount);
+      chrome.runtime.sendMessage({
+        type: 'DAPP_CONNECTION_SUCCESS',
+        data: { account: currentAccount }
+      }).catch((err) => {
+        console.log('通知 background 失败（正常如果没有待处理请求）:', err.message);
+      });
+    }
+  }, [currentView, currentAccount]);
 
   const handleLock = () => {
     lockWallet();
@@ -65,6 +97,9 @@ function WalletApp() {
 
   return (
     <div className="plasmo-w-[360px] plasmo-min-h-[500px] plasmo-bg-[#2d3142]">
+      {/* DApp 连接通知器 */}
+      <DAppConnectionNotifier isConnected={isConnected} currentAccount={currentAccount} />
+
       {currentView === 'lock' && (
         <LockScreen
           onUnlock={() => setCurrentView('unlock')}

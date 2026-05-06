@@ -42,12 +42,37 @@ window.addEventListener("message", (event) => {
          }, window.location.origin)
          return
       }
+      
+      // 如果是待处理状态，不立即返回，等后续通知
+      if (response?.pending) {
+        console.log("⏳ 连接请求待处理，等待钱包扩展响应");
+        return;
+      }
+      
       window.postMessage({
         from: 'message-bridge',
         requestId: event.data.requestId,
         success: true,
-        data: response.data
+        data: response?.data
       }, "*")
     }
   )
+})
+
+// 监听来自 background 的连接批准消息
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("收到来自 background 的消息：", message);
+  
+  if (message.type === 'WALLET_CONNECTION_APPROVED') {
+    // 转发连接批准消息到 injected-helper
+    window.postMessage({
+      from: 'message-bridge',
+      requestId: message.requestId,
+      success: true,
+      data: message.data
+    }, "*");
+    sendResponse({ success: true });
+  }
+  
+  return true;
 })
