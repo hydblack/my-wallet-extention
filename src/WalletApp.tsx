@@ -5,14 +5,17 @@ import { CreateWallet } from './components/CreateWallet';
 import { ImportWallet } from './components/ImportWallet';
 import { MainDashboard } from './components/MainDashboard';
 import { ExportModal } from './components/ExportModal';
+import { TransactionConfirmation } from './components/TransactionConfirmation';
 import { useWalletStore } from './stores/walletStore';
+import { useTransactionStore } from './stores/transactionStore';
+import { TX_CONFIRMED, TX_REJECTED } from './utils/constants';
 
 type View = 'lock' | 'unlock' | 'create' | 'import' | 'dashboard';
 
 // DApp 连接请求通知组件
-const DAppConnectionNotifier: React.FC<{ isConnected: boolean; currentAccount: unknown }> = ({ isConnected, currentAccount }) => {
+const DAppConnectionNotifier: React.FC<{ currentAccount: unknown }> = ({ currentAccount }) => {
   useEffect(() => {
-    if (isConnected && currentAccount) {
+    if (currentAccount) {
       // 通知 background DApp 连接成功
       console.log('📤 通知 DApp 连接成功:', currentAccount);
       chrome.runtime.sendMessage({
@@ -22,7 +25,7 @@ const DAppConnectionNotifier: React.FC<{ isConnected: boolean; currentAccount: u
         // 忽略发送失败（可能 background 已经通过 storage 监听到了）
       });
     }
-  }, [isConnected, currentAccount]);
+  }, [currentAccount]);
 
   return null;
 };
@@ -33,8 +36,16 @@ function WalletApp() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   // 从 store 读取钱包状态
-  const { accounts, isLocked, lockWallet, isConnected, currentAccount } = useWalletStore();
+  const { accounts, isLocked, lockWallet, currentAccount } = useWalletStore();
   const hasWallet = accounts.length > 0;
+
+  // 交易确认相关状态
+  const {
+    pendingTransactions,
+    confirmTx,
+    rejectTx,
+  } = useTransactionStore();
+  const currentPendingTx = pendingTransactions[0];
 
   // 初始化时根据钱包状态决定显示哪个页面
   useEffect(() => {
@@ -88,6 +99,25 @@ function WalletApp() {
     setExportType(null);
   };
 
+  // 交易确认处理
+  const handleTxConfirm = (requestId: string, hash: string) => {
+    confirmTx(requestId, hash);
+    // 通知 background 交易已确认
+    chrome.runtime.sendMessage({
+      type: TX_CONFIRMED,
+      data: { requestId, hash },
+    }).catch(() => {});
+  };
+
+  const handleTxReject = (requestId: string, error: string) => {
+    rejectTx(requestId);
+    // 通知 background 交易已拒绝
+    chrome.runtime.sendMessage({
+      type: TX_REJECTED,
+      data: { requestId, error },
+    }).catch(() => {});
+  };
+
   // 未初始化时不渲染内容，避免闪烁
   if (!isInitialized) {
     return (
@@ -98,51 +128,67 @@ function WalletApp() {
   return (
     <div className="plasmo-w-[360px] plasmo-min-h-[500px] plasmo-bg-[#2d3142]">
       {/* DApp 连接通知器 */}
-      <DAppConnectionNotifier isConnected={isConnected} currentAccount={currentAccount} />
+      <DAppConnectionNotifier currentAccount={currentAccount} />
 
-      {currentView === 'lock' && (
-        <LockScreen
-          onUnlock={() => setCurrentView('unlock')}
-          onImport={() => setCurrentView('import')}
-          onCreate={() => setCurrentView('create')}
-          hasWallet={hasWallet}
+      {/* 交易确认界面（优先显示，覆盖其他内容） */}
+      {currentPendingTx && currentView === 'dashboard' && (
+        <TransactionConfirmation
+          tx={currentPendingTx.tx}
+          origin={currentPendingTx.origin}
+          requestId={currentPendingTx.requestId}
+          onConfirm={handleTxConfirm}
+          onReject={handleTxReject}
         />
       )}
 
-      {currentView === 'unlock' && (
-        <UnlockScreen
-          onUnlock={handleUnlock}
-          onBack={() => setCurrentView('lock')}
-          onImport={() => setCurrentView('import')}
-        />
-      )}
+      {/* 正常 UI（无 pending 交易时显示） */}
+      {!(currentPendingTx && currentView === 'dashboard') && (
+        <>
+          {currentView === 'lock' && (
+            <LockScreen
+              onUnlock={() => setCurrentView('unlock')}
+              onImport={() => setCurrentView('import')}
+              onCreate={() => setCurrentView('create')}
+              hasWallet={hasWallet}
+            />
+          )}
 
-      {currentView === 'create' && (
-        <CreateWallet
-          onCreated={handleWalletCreated}
-          onBack={() => setCurrentView('lock')}
-        />
-      )}
+          {currentView === 'unlock' && (
+            <UnlockScreen
+              onUnlock={handleUnlock}
+              onBack={() => setCurrentView('lock')}
+              onImport={() => setCurrentView('import')}
+            />
+          )}
 
-      {currentView === 'import' && (
-        <ImportWallet
-          onImported={handleWalletCreated}
-          onBack={() => setCurrentView('lock')}
-        />
-      )}
+          {currentView === 'create' && (
+            <CreateWallet
+              onCreated={handleWalletCreated}
+              onBack={() => setCurrentView('lock')}
+            />
+          )}
 
-      {currentView === 'dashboard' && (
-        <MainDashboard
-          onLock={handleLock}
-          onExport={handleOpenExport}
-        />
-      )}
+          {currentView === 'import' && (
+            <ImportWallet
+              onImported={handleWalletCreated}
+              onBack={() => setCurrentView('lock')}
+            />
+          )}
 
-      {exportType && (
-        <ExportModal
-          type={exportType}
-          onClose={handleCloseExport}
-        />
+          {currentView === 'dashboard' && (
+            <MainDashboard
+              onLock={handleLock}
+              onExport={handleOpenExport}
+            />
+          )}
+
+          {exportType && (
+            <ExportModal
+              type={exportType}
+              onClose={handleCloseExport}
+            />
+          )}
+        </>
       )}
     </div>
   );

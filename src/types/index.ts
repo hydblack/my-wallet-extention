@@ -31,3 +31,8 @@ export type {
   BridgeResponse,
   EthereumProvider,
 } from './dapp';
+export type {
+  TransactionRequest,
+  TransactionStatus,
+  TransactionRecord,
+} from './transaction';

@@ -62,7 +62,7 @@ window.addEventListener("message", (event) => {
 // 监听来自 background 的连接批准消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("收到来自 background 的消息：", message);
-  
+
   if (message.type === 'WALLET_CONNECTION_APPROVED') {
     // 转发连接批准消息到 injected-helper
     window.postMessage({
@@ -73,6 +73,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }, "*");
     sendResponse({ success: true });
   }
-  
+
+  // 转发交易确认结果到 injected-helper
+  if (message.type === 'TX_CONFIRMED') {
+    window.postMessage({
+      from: 'message-bridge',
+      requestId: message.requestId,
+      type: 'TX_CONFIRMED',
+      success: true,
+      data: message.data,
+    }, "*");
+    sendResponse({ success: true });
+  }
+
+  // 转发交易拒绝结果到 injected-helper
+  if (message.type === 'TX_REJECTED') {
+    window.postMessage({
+      from: 'message-bridge',
+      requestId: message.requestId,
+      type: 'TX_REJECTED',
+      success: false,
+      error: message.error,
+    }, "*");
+    sendResponse({ success: true });
+  }
+
   return true;
 })

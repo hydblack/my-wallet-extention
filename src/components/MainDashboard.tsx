@@ -6,6 +6,8 @@ import icon from "~/assets/icon.png"
 
 import { useWalletBalance } from "../hooks/useWalletBalance"
 import { useWalletStore } from "../stores/walletStore"
+import { useTransactionStore } from "../stores/transactionStore"
+import type { TransactionRecord } from "../types/transaction"
 
 interface MainDashboardProps {
   onLock: () => void
@@ -31,6 +33,148 @@ const INITIAL_TOKEN_FORM: NewTokenForm = {
   symbol: "",
   name: "",
   decimals: 18
+}
+
+// ─── 活动列表项组件 ─────────────────────────────────────────────────────
+
+interface ActivityItemProps {
+  record: TransactionRecord
+  isExpanded: boolean
+  onToggle: () => void
+}
+
+const ActivityItem: React.FC<ActivityItemProps> = ({ record, isExpanded, onToggle }) => {
+  const formatAddr = (addr?: string) => {
+    if (!addr) return "—"
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  const formatValue = (value?: string) => {
+    if (!value || value === "0x0" || value === "0") return null
+    try {
+      return ethers.formatEther(value)
+    } catch {
+      return null
+    }
+  }
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+
+    if (diffMin < 1) return "刚刚"
+    if (diffMin < 60) return `${diffMin} 分钟前`
+    const diffHour = Math.floor(diffMin / 60)
+    if (diffHour < 24) return `${diffHour} 小时前`
+    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  }
+
+  const statusConfig: Record<string, { icon: string; color: string; label: string }> = {
+    confirmed: { icon: "✅", color: "plasmo-text-green-400", label: "已确认" },
+    rejected: { icon: "❌", color: "plasmo-text-red-400", label: "已拒绝" },
+    failed: { icon: "⚠️", color: "plasmo-text-yellow-400", label: "失败" },
+    pending: { icon: "⏳", color: "plasmo-text-blue-400", label: "待确认" },
+  }
+
+  const status = statusConfig[record.status] || statusConfig.pending
+  const hasData = record.tx.data && record.tx.data !== "0x" && record.tx.data !== "0x0"
+  const valueDisplay = formatValue(record.tx.value)
+  const actionLabel = hasData ? "合约交互" : "ETH 转账"
+
+  return (
+    <div
+      className={`plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-transition-colors cursor-pointer ${
+        isExpanded ? "plasmo-border-[#c8f560]/30" : "plasmo-border-gray-600 hover:plasmo-border-gray-500"
+      }`}
+      onClick={onToggle}>
+      {/* 主信息行 */}
+      <div className="plasmo-p-3 plasmo-flex plasmo-items-center plasmo-space-x-3">
+        {/* 状态图标 */}
+        <span className="plasmo-text-base plasmo-flex-shrink-0">{status.icon}</span>
+
+        {/* 操作信息 */}
+        <div className="plasmo-flex-1 plasmo-min-w-0">
+          <div className="plasmo-flex plasmo-items-center plasmo-space-x-2">
+            <span className={`plasmo-text-xs plasmo-font-medium ${status.color}`}>{actionLabel}</span>
+            <span className={`plasmo-text-[10px] plasmo-px-1.5 plasmo-py-0.5 plasmo-rounded-full plasmo-bg-gray-700 plasmo-text-gray-400`}>
+              {status.label}
+            </span>
+          </div>
+          <div className="plasmo-flex plasmo-items-center plasmo-space-x-2 plasmo-mt-0.5">
+            <span className="plasmo-text-xs plasmo-text-gray-500 plasmo-font-mono">{formatAddr(record.tx.to)}</span>
+            {record.origin && (
+              <>
+                <span className="plasmo-text-gray-700">·</span>
+                <span className="plasmo-text-xs plasmo-text-gray-600 plasmo-truncate">{record.origin}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 右侧 */}
+        <div className="plasmo-text-right plasmo-flex-shrink-0">
+          {valueDisplay && (
+            <p className="plasmo-text-xs plasmo-font-medium plasmo-text-gray-200">
+              {parseFloat(valueDisplay).toFixed(4)} ETH
+            </p>
+          )}
+          <p className="plasmo-text-[10px] plasmo-text-gray-600">{formatTime(record.timestamp)}</p>
+        </div>
+      </div>
+
+      {/* 展开详情 */}
+      {isExpanded && (
+        <div className="plasmo-border-t plasmo-border-gray-600 plasmo-px-3 plasmo-py-3 plasmo-space-y-2 plasmo-bg-[#2d3142]/50 plasmo-rounded-b-xl">
+          <div className="plasmo-flex plasmo-justify-between">
+            <span className="plasmo-text-[10px] plasmo-text-gray-600">请求 ID</span>
+            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{record.requestId}</span>
+          </div>
+
+          {record.hash && (
+            <div className="plasmo-flex plasmo-justify-between">
+              <span className="plasmo-text-[10px] plasmo-text-gray-600">交易哈希</span>
+              <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{record.hash}</span>
+            </div>
+          )}
+
+          <div className="plasmo-flex plasmo-justify-between">
+            <span className="plasmo-text-[10px] plasmo-text-gray-600">From</span>
+            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{formatAddr(record.tx.from)}</span>
+          </div>
+
+          <div className="plasmo-flex plasmo-justify-between">
+            <span className="plasmo-text-[10px] plasmo-text-gray-600">To</span>
+            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{formatAddr(record.tx.to)}</span>
+          </div>
+
+          {record.estimatedGasFee && (
+            <div className="plasmo-flex plasmo-justify-between">
+              <span className="plasmo-text-[10px] plasmo-text-gray-600">手续费</span>
+              <span className="plasmo-text-[10px] plasmo-text-[#c8f560]">{record.estimatedGasFee}</span>
+            </div>
+          )}
+
+          {record.error && (
+            <div className="plasmo-pt-1 plasmo-border-t plasmo-border-gray-600">
+              <span className="plasmo-text-[10px] plasmo-text-gray-600">错误信息</span>
+              <p className="plasmo-text-[10px] plasmo-text-red-400 plasmo-mt-0.5 plasmo-break-all">{record.error}</p>
+            </div>
+          )}
+
+          {hasData && (
+            <div className="plasmo-pt-1 plasmo-border-t plasmo-border-gray-600">
+              <span className="plasmo-text-[10px] plasmo-text-gray-600">调用数据</span>
+              <pre className="plasmo-text-[9px] plasmo-text-gray-500 plasmo-font-mono plasmo-break-all plasmo-whitespace-pre-wrap plasmo-mt-0.5 plasmo-max-h-20 plasmo-overflow-y-auto">
+                {record.tx.data}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export const MainDashboard: React.FC<MainDashboardProps> = ({
@@ -67,6 +211,13 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
     maxPriorityFeePerGas: bigint | null
   } | null>(null)
   const [isEstimatingGas, setIsEstimatingGas] = useState(false)
+
+  // ── Tab 切换状态 ──
+  const [activeTab, setActiveTab] = useState<'tokens' | 'activity'>('tokens')
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
+
+  // ── 交易 Store ──
+  const { transactionHistory, clearHistory } = useTransactionStore()
 
   const {
     lockWallet,
@@ -660,80 +811,127 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
           </div>
         </div>
 
-        {/* Token 列表 */}
+        {/* Tab 切换 + 列表区域 */}
         <div className="plasmo-mt-6">
-          <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-mb-3">
-            <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400">
+          {/* Tab 栏 */}
+          <div className="plasmo-flex plasmo-space-x-1 plasmo-mb-3 plasmo-bg-[#2d3142] plasmo-p-1 plasmo-rounded-lg">
+            <button
+              onClick={() => setActiveTab('tokens')}
+              className={`plasmo-flex-1 plasmo-py-2 plasmo-text-sm plasmo-font-medium plasmo-rounded-md plasmo-transition-colors ${
+                activeTab === 'tokens'
+                  ? 'plasmo-bg-[#3d4252] plasmo-text-gray-100'
+                  : 'plasmo-text-gray-500 hover:plasmo-text-gray-300'
+              }`}>
               代币
-            </h3>
-            {tokens.length > 0 && (
-              <button
-                onClick={openAddTokenDialog}
-                className="plasmo-flex plasmo-items-center plasmo-space-x-1 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
-                <svg
-                  className="plasmo-w-4 plasmo-h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
-                <span>添加代币</span>
-              </button>
-            )}
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`plasmo-flex-1 plasmo-py-2 plasmo-text-sm plasmo-font-medium plasmo-rounded-md plasmo-transition-colors relative ${
+                activeTab === 'activity'
+                  ? 'plasmo-bg-[#3d4252] plasmo-text-gray-100'
+                  : 'plasmo-text-gray-500 hover:plasmo-text-gray-300'
+              }`}>
+              活动
+              {transactionHistory.length > 0 && (
+                <span className="plasmo-ml-1 plasmo-text-[10px] plasmo-bg-[#c8f560]/20 plasmo-text-[#c8f560] plasmo-px-1.5 plasmo-py-0.5 plasmo-rounded-full">
+                  {transactionHistory.length}
+                </span>
+              )}
+            </button>
           </div>
-          <div className="plasmo-space-y-2">
-            {tokens.length === 0 && (
-              <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-6 plasmo-text-center">
-                <p className="plasmo-text-sm plasmo-text-gray-500">暂无代币</p>
+
+          {/* 代币 Tab */}
+          {activeTab === 'tokens' && (
+            <>
+              <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-mb-3">
+                <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400">
+                  我的代币
+                </h3>
                 <button
                   onClick={openAddTokenDialog}
-                  className="plasmo-mt-3 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
-                  + 添加第一个代币
-                </button>
-              </div>
-            )}
-            {tokens.map((token) => (
-              <div
-                key={token.address}
-                className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-4 plasmo-flex plasmo-items-center plasmo-space-x-3">
-                <div className="plasmo-flex-1">
-                  <p className="plasmo-font-medium plasmo-text-gray-200">
-                    {token.symbol}
-                  </p>
-                  <p className="plasmo-text-sm plasmo-text-gray-500">
-                    {token.name}
-                  </p>
-                </div>
-                <div className="plasmo-text-right">
-                  <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
-                    {token.balance ? Number(token.balance).toFixed(4) : "0.0000"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => removeToken(token.address)}
-                  className="plasmo-p-1 plasmo-text-gray-500 hover:plasmo-text-red-400 plasmo-transition-colors"
-                  title="移除代币">
-                  <svg
-                    className="plasmo-w-4 plasmo-h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
+                  className="plasmo-flex plasmo-items-center plasmo-space-x-1 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
+                  <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
+                  <span>添加代币</span>
                 </button>
               </div>
-            ))}
-          </div>
+              <div className="plasmo-space-y-2">
+                {tokens.length === 0 && (
+                  <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-6 plasmo-text-center">
+                    <p className="plasmo-text-sm plasmo-text-gray-500">暂无代币</p>
+                    <button
+                      onClick={openAddTokenDialog}
+                      className="plasmo-mt-3 plasmo-text-sm plasmo-text-[#c8f560] hover:plasmo-brightness-110">
+                      + 添加第一个代币
+                    </button>
+                  </div>
+                )}
+                {tokens.map((token) => (
+                  <div
+                    key={token.address}
+                    className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-4 plasmo-flex plasmo-items-center plasmo-space-x-3">
+                    <div className="plasmo-flex-1">
+                      <p className="plasmo-font-medium plasmo-text-gray-200">{token.symbol}</p>
+                      <p className="plasmo-text-sm plasmo-text-gray-500">{token.name}</p>
+                    </div>
+                    <div className="plasmo-text-right">
+                      <p className="plasmo-font-medium plasmo-text-gray-200 plasmo-text-sm">
+                        {token.balance ? Number(token.balance).toFixed(4) : "0.0000"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => removeToken(token.address)}
+                      className="plasmo-p-1 plasmo-text-gray-500 hover:plasmo-text-red-400 plasmo-transition-colors"
+                      title="移除代币">
+                      <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* 活动 Tab */}
+          {activeTab === 'activity' && (
+            <div>
+              <div className="plasmo-flex plasmo-items-center plasmo-justify-between plasmo-mb-3">
+                <h3 className="plasmo-text-sm plasmo-font-medium plasmo-text-gray-400">交易记录</h3>
+                {transactionHistory.length > 0 && (
+                  <button
+                    onClick={() => clearHistory()}
+                    className="plasmo-text-xs plasmo-text-gray-500 hover:plasmo-text-red-400 plasmo-transition-colors">
+                    清空历史
+                  </button>
+                )}
+              </div>
+
+              {transactionHistory.length === 0 ? (
+                <div className="plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-border-gray-600 plasmo-p-8 plasmo-text-center">
+                  <svg className="plasmo-w-10 plasmo-h-10 plasmo-text-gray-600 plasmo-mx-auto plasmo-mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <p className="plasmo-text-sm plasmo-text-gray-500">暂无交易记录</p>
+                  <p className="plasmo-text-xs plasmo-text-gray-600 plasmo-mt-1">来自 DApp 的交易请求会显示在这里</p>
+                </div>
+              ) : (
+                <div className="plasmo-space-y-2">
+                  {transactionHistory.map((record) => (
+                    <ActivityItem
+                      key={record.requestId}
+                      record={record}
+                      isExpanded={expandedTxId === record.requestId}
+                      onToggle={() => setExpandedTxId(
+                        expandedTxId === record.requestId ? null : record.requestId
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

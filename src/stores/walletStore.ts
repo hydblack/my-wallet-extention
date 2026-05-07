@@ -405,8 +405,7 @@ export const useWalletStore = create<WalletStore>()(
         const hashedPassword = SHA256(password).toString()
         return state.password === hashedPassword
       },
-      // 拓展
-      isConnected: false,
+      // DApp 连接
       connect: async (): Promise<WalletAccount> => {
         const state = await new Promise<WalletState | null>((resolve) => {
           chrome.storage.local.get("wallet-store", (result) => {
@@ -507,6 +506,7 @@ export const useWalletStore = create<WalletStore>()(
         currentNetwork: state.currentNetwork,
         currentAccount: state.currentAccount,
         isLocked: state.isLocked,
+        isConnected: state.isConnected,
         mnemonic: state.mnemonic,
         password: state.password,
       })
