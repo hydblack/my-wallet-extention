@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react"
 
 import icon from "~/assets/icon.png"
 
+import { detectTransactionType, getTransactionTypeColor, getTransactionTypeBgColor } from "../utils/txTypeDetector"
 import { useWalletBalance } from "../hooks/useWalletBalance"
 import { useWalletStore } from "../stores/walletStore"
 import { useTransactionStore } from "../stores/transactionStore"
@@ -79,14 +80,51 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ record, isExpanded, onToggl
   }
 
   const status = statusConfig[record.status] || statusConfig.pending
+  
+  // 检测交易类型
+  const txType = detectTransactionType(record.tx)
+  const typeColor = getTransactionTypeColor(txType)
+  const typeBgColor = getTransactionTypeBgColor(txType)
+  
   const hasData = record.tx.data && record.tx.data !== "0x" && record.tx.data !== "0x0"
   const valueDisplay = formatValue(record.tx.value)
-  const actionLabel = hasData ? "合约交互" : "ETH 转账"
+  
+  // 获取交易类型图标
+  const getTxTypeIcon = (type: string) => {
+    switch (type) {
+      case 'Transfer':
+        return (
+          <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        )
+      case 'Approval':
+        return (
+          <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-.616 0-1.184-.732-1.184-1.664 0-.76.503-1.667 1.262-2.92" />
+          </svg>
+        )
+      case 'Swap':
+        return (
+          <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+        )
+      default:
+        return (
+          <svg className="plasmo-w-4 plasmo-h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+        )
+    }
+  }
 
   return (
     <div
-      className={`plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-transition-colors cursor-pointer ${
-        isExpanded ? "plasmo-border-[#c8f560]/30" : "plasmo-border-gray-600 hover:plasmo-border-gray-500"
+      className={`plasmo-bg-[#3d4252] plasmo-rounded-xl plasmo-border plasmo-transition-all cursor-pointer ${
+        isExpanded 
+          ? `plasmo-border-[#c8f560]/30 plasmo-shadow-lg plasmo-shadow-[#c8f560]/5` 
+          : "plasmo-border-gray-600 hover:plasmo-border-gray-500 plasmo-hover:shadow-md"
       }`}
       onClick={onToggle}>
       {/* 主信息行 */}
@@ -94,10 +132,15 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ record, isExpanded, onToggl
         {/* 状态图标 */}
         <span className="plasmo-text-base plasmo-flex-shrink-0">{status.icon}</span>
 
+        {/* 交易类型图标 + 标签 */}
+        <div className={`plasmo-flex-shrink-0 plasmo-w-8 plasmo-h-8 plasmo-rounded-lg plasmo-flex plasmo-items-center plasmo-justify-center ${typeBgColor}`}>
+          <span className={typeColor}>{getTxTypeIcon(txType)}</span>
+        </div>
+
         {/* 操作信息 */}
         <div className="plasmo-flex-1 plasmo-min-w-0">
           <div className="plasmo-flex plasmo-items-center plasmo-space-x-2">
-            <span className={`plasmo-text-xs plasmo-font-medium ${status.color}`}>{actionLabel}</span>
+            <span className={`plasmo-text-xs plasmo-font-semibold ${typeColor}`}>{txType}</span>
             <span className={`plasmo-text-[10px] plasmo-px-1.5 plasmo-py-0.5 plasmo-rounded-full plasmo-bg-gray-700 plasmo-text-gray-400`}>
               {status.label}
             </span>
@@ -107,16 +150,16 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ record, isExpanded, onToggl
             {record.origin && (
               <>
                 <span className="plasmo-text-gray-700">·</span>
-                <span className="plasmo-text-xs plasmo-text-gray-600 plasmo-truncate">{record.origin}</span>
+                <span className="plasmo-text-xs plasmo-text-gray-600 plasmo-truncate plasmo-max-w-[100px]">{record.origin}</span>
               </>
             )}
           </div>
         </div>
 
-        {/* 右侧 */}
+        {/* 右侧金额 */}
         <div className="plasmo-text-right plasmo-flex-shrink-0">
           {valueDisplay && (
-            <p className="plasmo-text-xs plasmo-font-medium plasmo-text-gray-200">
+            <p className="plasmo-text-xs plasmo-font-bold plasmo-text-gray-200">
               {parseFloat(valueDisplay).toFixed(4)} ETH
             </p>
           )}
@@ -126,47 +169,63 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ record, isExpanded, onToggl
 
       {/* 展开详情 */}
       {isExpanded && (
-        <div className="plasmo-border-t plasmo-border-gray-600 plasmo-px-3 plasmo-py-3 plasmo-space-y-2 plasmo-bg-[#2d3142]/50 plasmo-rounded-b-xl">
-          <div className="plasmo-flex plasmo-justify-between">
-            <span className="plasmo-text-[10px] plasmo-text-gray-600">请求 ID</span>
-            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{record.requestId}</span>
+        <div className="plasmo-border-t plasmo-border-gray-600 plasmo-px-3 plasmo-py-3 plasmo-space-y-3 plasmo-bg-[#2d3142]/30 plasmo-rounded-b-xl">
+          {/* 交易类型标题 */}
+          <div className={`plasmo-inline-flex plasmo-items-center plasmo-space-x-1.5 plasmo-px-2.5 plasmo-py-1 plasmo-rounded-lg ${typeBgColor}`}>
+            <span className={typeColor}>{getTxTypeIcon(txType)}</span>
+            <span className={`plasmo-text-xs plasmo-font-semibold ${typeColor}`}>{txType} Transaction</span>
           </div>
 
-          {record.hash && (
-            <div className="plasmo-flex plasmo-justify-between">
-              <span className="plasmo-text-[10px] plasmo-text-gray-600">交易哈希</span>
-              <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{record.hash}</span>
+          {/* 详细信息网格 */}
+          <div className="plasmo-grid plasmo-grid-cols-2 plasmo-gap-2 plasmo-text-xs">
+            <div className="plasmo-space-y-1">
+              <div className="plasmo-text-gray-600">请求 ID</div>
+              <div className="plasmo-text-gray-400 plasmo-font-mono plasmo-text-[10px] plasmo-break-all">{record.requestId}</div>
             </div>
-          )}
-
-          <div className="plasmo-flex plasmo-justify-between">
-            <span className="plasmo-text-[10px] plasmo-text-gray-600">From</span>
-            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{formatAddr(record.tx.from)}</span>
-          </div>
-
-          <div className="plasmo-flex plasmo-justify-between">
-            <span className="plasmo-text-[10px] plasmo-text-gray-600">To</span>
-            <span className="plasmo-text-[10px] plasmo-text-gray-400 plasmo-font-mono">{formatAddr(record.tx.to)}</span>
-          </div>
-
-          {record.estimatedGasFee && (
-            <div className="plasmo-flex plasmo-justify-between">
-              <span className="plasmo-text-[10px] plasmo-text-gray-600">手续费</span>
-              <span className="plasmo-text-[10px] plasmo-text-[#c8f560]">{record.estimatedGasFee}</span>
+            
+            {record.hash && (
+              <div className="plasmo-space-y-1">
+                <div className="plasmo-text-gray-600">交易哈希</div>
+                <div className="plasmo-text-gray-400 plasmo-font-mono plasmo-text-[10px] plasmo-break-all">{record.hash}</div>
+              </div>
+            )}
+            
+            <div className="plasmo-space-y-1">
+              <div className="plasmo-text-gray-600">From</div>
+              <div className="plasmo-text-gray-300 plasmo-font-mono">{formatAddr(record.tx.from)}</div>
             </div>
-          )}
+            
+            <div className="plasmo-space-y-1">
+              <div className="plasmo-text-gray-600">To</div>
+              <div className="plasmo-text-gray-300 plasmo-font-mono">{formatAddr(record.tx.to)}</div>
+            </div>
+            
+            {valueDisplay && (
+              <div className="plasmo-space-y-1">
+                <div className="plasmo-text-gray-600">Value</div>
+                <div className="plasmo-text-gray-200 plasmo-font-medium">{parseFloat(valueDisplay).toFixed(6)} ETH</div>
+              </div>
+            )}
+            
+            {record.estimatedGasFee && (
+              <div className="plasmo-space-y-1">
+                <div className="plasmo-text-gray-600">Gas Fee</div>
+                <div className="plasmo-text-[#c8f560]">{record.estimatedGasFee}</div>
+              </div>
+            )}
+          </div>
 
           {record.error && (
-            <div className="plasmo-pt-1 plasmo-border-t plasmo-border-gray-600">
-              <span className="plasmo-text-[10px] plasmo-text-gray-600">错误信息</span>
-              <p className="plasmo-text-[10px] plasmo-text-red-400 plasmo-mt-0.5 plasmo-break-all">{record.error}</p>
+            <div className="plasmo-pt-2 plasmo-border-t plasmo-border-gray-600">
+              <div className="plasmo-text-[10px] plasmo-text-gray-600 plasmo-mb-1">错误信息</div>
+              <p className="plasmo-text-xs plasmo-text-red-400 plasmo-break-all">{record.error}</p>
             </div>
           )}
 
           {hasData && (
-            <div className="plasmo-pt-1 plasmo-border-t plasmo-border-gray-600">
-              <span className="plasmo-text-[10px] plasmo-text-gray-600">调用数据</span>
-              <pre className="plasmo-text-[9px] plasmo-text-gray-500 plasmo-font-mono plasmo-break-all plasmo-whitespace-pre-wrap plasmo-mt-0.5 plasmo-max-h-20 plasmo-overflow-y-auto">
+            <div className="plasmo-pt-2 plasmo-border-t plasmo-border-gray-600">
+              <div className="plasmo-text-[10px] plasmo-text-gray-600 plasmo-mb-1">调用数据</div>
+              <pre className="plasmo-text-[9px] plasmo-text-gray-500 plasmo-font-mono plasmo-break-all plasmo-whitespace-pre-wrap plasmo-bg-[#2d3142] plasmo-p-2 plasmo-rounded-lg plasmo-max-h-20 plasmo-overflow-y-auto">
                 {record.tx.data}
               </pre>
             </div>

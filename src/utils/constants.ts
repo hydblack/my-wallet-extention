@@ -52,6 +52,18 @@ export const TX_REJECTED = 'TX_REJECTED';
 /** DApp 通过 EIP-1193 provider 发起 RPC 调用 */
 export const PROVIDER_RPC_REQUEST = 'PROVIDER_RPC_REQUEST';
 
+// ─── DApp Provider 消息类型（EIP-1102 / EIP-747 / EIP-3085 / EIP-3326）───
+/** DApp 请求添加自定义代币（EIP-747 wallet_watchAsset） */
+export const WALLET_WATCH_ASSET = 'WALLET_WATCH_ASSET';
+/** DApp 请求添加自定义链（EIP-3085 wallet_addEthereumChain） */
+export const WALLET_ADD_ETHEREUM_CHAIN = 'WALLET_ADD_ETHEREUM_CHAIN';
+/** DApp 请求切换链（EIP-3326 wallet_switchEthereumChain） */
+export const WALLET_SWITCH_ETHEREUM_CHAIN = 'WALLET_SWITCH_ETHEREUM_CHAIN';
+/** DApp 请求签名消息（eth_sign / personal_sign） */
+export const WALLET_SIGN = 'WALLET_SIGN';
+/** DApp 请求签名结构化数据（eth_signTypedData / eth_signTypedData_v4） */
+export const WALLET_SIGN_TYPED_DATA = 'WALLET_SIGN_TYPED_DATA';
+
 // ─── 默认网络配置 ──────────────────────────────────────────────────────────
 export const DEFAULT_NETWORKS: Network[] = [
   {

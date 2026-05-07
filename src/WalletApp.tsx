@@ -8,7 +8,7 @@ import { ExportModal } from './components/ExportModal';
 import { TransactionConfirmation } from './components/TransactionConfirmation';
 import { useWalletStore } from './stores/walletStore';
 import { useTransactionStore } from './stores/transactionStore';
-import { TX_CONFIRMED, TX_REJECTED } from './utils/constants';
+import { TX_STORE_KEY, TX_CONFIRMED, TX_REJECTED } from './utils/constants';
 
 type View = 'lock' | 'unlock' | 'create' | 'import' | 'dashboard';
 
@@ -61,6 +61,18 @@ function WalletApp() {
         setCurrentView('lock');
       }
       setIsInitialized(true);
+
+      // 主动从 chrome.storage.local 同步 pending 交易
+      // 解决 background 在 popup 打开前就写入数据、onChanged 不会触发的问题
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.get(TX_STORE_KEY, (result) => {
+          const raw = result[TX_STORE_KEY];
+          if (raw) {
+            const rawStr = typeof raw === 'string' ? raw : JSON.stringify(raw);
+            useTransactionStore.getState()._syncFromStorage(rawStr);
+          }
+        });
+      }
     }
   }, [hasWallet, isLocked, isInitialized]);
 
